@@ -252,13 +252,63 @@ ScriptLine
 
 每个用户还有一张配置表。其配置为：
 
-UserConfig (用户配置表)
+Config
+| 字段名 | 类型 | 说明 | 示例值 |
+| :--- | :--- | :--- | :--- |
+| **key** | String (PK) | 唯一键名 (建议用点分法) | `llm.deepseek.api_key` |
+| **value** | Text | 配置值 (不论什么类型都转字符串存) | `sk-123456` |
+| **group** | String | 分组 (用于前端 Tab 切换) | `llm_settings` |
+| **label** | String | 前端显示的中文名称 | `DeepSeek API Key` |
+| **type** | String |  控件类型 | `password` / `text` / `select` / `boolean` / `color` |
+| **options** | JSON | 如果是 select，这里存选项 | `["deepseek", "qwen", "openai"]` |
+| **default** | String | 默认值 | `deepseek` |
+| **is_public** | Boolean | 是否公开 (部分配置可能不给前端看) | `true` |
 
-| 字段名 | 类型 | 示例值 |
-| :--- | :--- | :--- |
-| key | String (PK) | llm_provider |
-| value | String | deepseek |
-| group | String | ai_settings |
+A. appearance (外观与交互)
+
+| Key | Label | Type | Options / Default | 说明 |
+| :--- | :--- | :--- | :--- | :--- |
+| `app.theme_mode` | 主题模式 | `select` | `["light", "dark", "system"]` | 明亮/暗黑/跟随系统 |
+| `app.primary_color` | 主题色 | `color` | `#1677ff` | 品牌主色调 |
+| `app.language` | 语言 | `select` | `["zh-CN", "en-US"]` | 国际化支持 |
+| `app.font_size` | 字体大小 | `select` | `["small", "medium", "large"]` | 针对视力不好的用户 |
+
+B. llm_settings (LLM设置)
+
+| Key | Label | Type | Default | 说明 |
+| :--- | :--- | :--- | :--- | :--- |
+| `llm.active_provider` | 当前 LLM 服务商 | `select` | `deepseek` | 下拉选 DeepSeek/Qwen/Local |
+| `llm.deepseek.api_key` | DeepSeek API Key | `password` | - | 存密钥，前端显示为 ****** |
+| `llm.qwen.api_key` | Qwen API Key | `password` | - | 存密钥，前端显示为 ****** |
+| `llm.local.url` | 本地 LLM 地址 | `text` | `http://localhost:11434` | Ollama 等本地服务地址 |
+
+C. tts_settings (语音合成设置)
+
+| Key | Label | Type | Default | 说明 |
+| :--- | :--- | :--- | :--- | :--- |
+| `tts.active_backend` | TTS 后端类型 | `select` | `local_docker` | Local / Remote(AutoDL) / Aliyun |
+| `tts.local.url` | 本地服务地址 | `text` | `http://tts-base:8000` | Docker 内部地址 |
+| `tts.remote.url` | 远程服务地址 | `text` | - | AutoDL 的公网穿透地址 |
+| `tts.remote.token` | 远程鉴权 Token | `password` | - | 防止被白嫖的简单的密码，这个需要确认autodl里真有这东西？ |
+| `tts.aliyun.app_key` | 阿里云 AppKey | `text` | - | 第三方接口必填 |
+| `tts.aliyun.token` | 阿里云 Token | `password` | - | 第三方接口必填 |
+
+D. synthesis_config (合成策略与高级参数)
+
+| Key | Label | Type | Default | 说明 |
+| :--- | :--- | :--- | :--- | :--- |
+| **基础设置** | | | | |
+| `syn.default_speed` | 默认语速 | `number` | `1.0` | 建议范围 0.8 - 1.5 比较自然。 |
+| `syn.silence_duration` | 句间静音时长 | `number` | `0.5` | 单位：秒。合成长音频时，每句话之间插入的空白停顿。 |
+| `syn.export_path` | 默认导出路径 | `text` | `/data/outputs` | 容器内路径，需挂载对应宿主机 storage 目录。 |
+| `syn.max_workers` | 最大并发数 | `number` | `2` | 限制同时合成任务数。防止显存溢出 (OOM) 的关键。 |
+| **音频处理** | | | | |
+| `syn.volume_gain` | 音量增益 | `number` | `1.0` | 1.0 为原声。针对声音偏小的模型可设为 1.2 或 1.5。 |
+| `syn.audio_format` | 音频导出格式 | `select` | `wav` | `["wav", "mp3"]`。wav 无损，mp3 体积小。 |
+| **文本预处理** | | | | |
+| `syn.auto_slice` | 自动切分过长文本 | `boolean` | `true` | 开启后防止单句超过模型字符限制导致报错。 |
+| `syn.text_clean` | 文本清洗 | `boolean` | `true` | 自动去除无法朗读的特殊符号（如 ✨, ---, [] 等）。 |
+
 
 除了用户配置表外，项目后端运行还需要一些配置，这些配置放在.env环境变量中，仅开发人员使用，普通用户不使用
 
@@ -477,13 +527,69 @@ Response: { "task_id": "task_syn_batch_001" }
 
 URL: GET /api/settings
 
-Response: { "llm_provider": "deepseek", "api_key": "sk-***" }
-
+Response (按照 Group 分组返回):
+```
+{
+  "appearance": [
+    {
+      "key": "app.theme_mode",
+      "value": "light",
+      "label": "主题模式",
+      "type": "select",
+      "options": ["light", "dark", "system"],
+      "default": "system"
+    }
+  ],
+  "llm_settings": [
+    {
+      "key": "llm.active_provider",
+      "value": "deepseek",
+      "label": "当前 LLM 服务商",
+      "type": "select",
+      "options": ["deepseek", "qwen", "local"]
+    },
+    {
+      "key": "llm.deepseek.api_key",
+      "value": "sk-******", // 注意：后端应脱敏返回
+      "label": "DeepSeek API Key",
+      "type": "password"
+    }
+  ],
+  "tts_settings": [
+    {
+      "key": "tts.active_backend",
+      "value": "local_docker",
+      "label": "TTS 后端类型",
+      "type": "select",
+      "options": ["local_docker", "remote_autodl", "aliyun"]
+    }
+  ],
+  "synthesis_config": [
+    {
+      "key": "syn.silence_duration",
+      "value": "0.5",
+      "label": "句间静音时长",
+      "type": "number",
+      "default": "0.5"
+    }
+  ]
+}
+```
 #### 更新配置
 
 URL: PUT /api/settings
+前端只传修改了的 KV 对。
 
-Request: { "llm_provider": "local", "api_key": "xxxx" }
+Request: 
+
+```
+{
+  "updates": [
+    { "key": "llm.active_provider", "value": "local" },
+    { "key": "llm.local.url", "value": "http://localhost:11434" }
+  ]
+}
+```
 
 ## 通用轮询接口
 
