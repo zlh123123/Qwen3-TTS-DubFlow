@@ -7,18 +7,73 @@ const USE_MOCK = true;
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // --- 1. 项目相关 ---
+// 获取项目列表
+export const getProjects = async () => {
+  if (USE_MOCK) {
+    await delay(600);
+    return {
+      data: [
+        { 
+          id: 'p-101', 
+          name: '斗破苍穹第一章', 
+          status: 'analyzing_characters', // 角色分析中
+          created_at: '2026-02-02T10:00:00Z',
+          progress: null 
+        },
+        { 
+          id: 'p-102', 
+          name: '凡人修仙传·第十回', 
+          status: 'characters_ready', // 待合成 (其实是待生成剧本)
+          created_at: '2026-02-01T14:30:00Z',
+          progress: null
+        },
+        { 
+          id: 'p-103', 
+          name: '三体·红岸基地', 
+          status: 'synthesizing', // 合成中
+          created_at: '2026-01-28T09:15:00Z',
+          progress: { current: 35, total: 100 } // 进度条数据
+        },
+        { 
+          id: 'p-104', 
+          name: '庆余年·范闲进京', 
+          status: 'completed', // 已完成
+          created_at: '2026-01-25T18:20:00Z',
+          progress: { current: 100, total: 100 }
+        }
+      ]
+    };
+  }
+  return client.get('/projects');
+};
+
+// 删除项目
+export const deleteProject = async (pid) => {
+  if (USE_MOCK) return { data: { success: true } };
+  return client.delete(`/projects/${pid}`);
+};
+
+// 创建项目 (稍微修改返回值以配合列表刷新)
 export const createProject = async (data) => {
   if (USE_MOCK) {
-    await delay(800);
-    return { data: { id: 'mock-project-001', name: data.name, created_at: new Date() } };
+    await delay(1000);
+    return { 
+      data: { 
+        id: `mock-${Date.now()}`, 
+        name: data.name, 
+        status: 'created',
+        created_at: new Date().toISOString() 
+      } 
+    };
   }
   return client.post('/projects', data);
 };
 
-export const getProject = async (pid) => {
-  if (USE_MOCK) return { data: { id: pid, name: '演示项目: 斗破苍穹' } };
-  return client.get(`/projects/${pid}`);
-};
+// export const getProject = async (pid) => {
+//   if (USE_MOCK) return { data: { id: pid, name: '演示项目: 斗破苍穹' } };
+//   return client.get(`/projects/${pid}`);
+// };
+
 
 // --- 2. 角色相关 ---
 export const analyzeCharacters = async (pid) => {

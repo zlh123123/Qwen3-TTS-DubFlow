@@ -1,183 +1,200 @@
-import React, { useState, useRef, useMemo } from 'react'; // 引入 useMemo
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createProject } from '../api/endpoints';
-import { BookOpen, ArrowRight, Upload, FileText, X, Clock, AlignLeft } from 'lucide-react';
-import { Settings } from 'lucide-react'; // 引入图标
-import SettingsModal from '../components/SettingsModal'; // 引入组件
+import { Settings, Plus, Trash2, Clock, MoreHorizontal, Github, FolderOpen } from 'lucide-react';
+import { getProjects, deleteProject } from '../api/endpoints';
+import SettingsModal from '../components/SettingsModal';
+import CreateProjectModal from '../components/CreateProjectModal';
 
 export default function CreateProject() {
-  const [text, setText] = useState('');
-  const [title, setTitle] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false); // 新增状态
-  const fileInputRef = useRef(null);
   const navigate = useNavigate();
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
+  // 弹窗状态
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
-  // --- 新增：计算预估时长 (基于 250字/分钟 的语速) ---
-  const stats = useMemo(() => {
-    const charCount = text.length;
-    // 假设平均语速：每分钟 250 字 (约 4.2 字/秒)
-    const totalSeconds = Math.ceil(charCount / 4.2);
-    
-    // 格式化为 MM:SS
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    const timeString = minutes > 0 
-      ? `${minutes}分 ${seconds}秒` 
-      : `${seconds}秒`;
+  // 初始化加载项目
+  useEffect(() => {
+    fetchProjects();
+  }, []);
 
-    return { charCount, timeString };
-  }, [text]);
-
-  const handleFileRead = (file) => {
-    if (!file.name.endsWith('.txt') && file.type !== 'text/plain') {
-      alert('目前版本仅支持 .txt 格式的小说文件');
-      return;
-    }
-    if (!title) setTitle(file.name.replace('.txt', ''));
-
-    const reader = new FileReader();
-    reader.onload = (e) => setText(e.target.result);
-    reader.onerror = () => alert('文件读取失败');
-    reader.readAsText(file);
-  };
-
-  const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
-  const handleDragLeave = (e) => { e.preventDefault(); setIsDragging(false); };
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setIsDragging(false);
-    if (e.dataTransfer.files?.[0]) handleFileRead(e.dataTransfer.files[0]);
-  };
-  const handleFileSelect = (e) => {
-    if (e.target.files?.[0]) handleFileRead(e.target.files[0]);
-  };
-
-  const handleCreate = async () => {
-    if (!text || !title) return alert("请填写项目名称并输入/上传小说内容");
-    setLoading(true);
+  const fetchProjects = async () => {
     try {
-      const res = await createProject({ name: title, content: text });
-      navigate(`/project/${res.data.id}/workshop`);
+      const res = await getProjects();
+      setProjects(res.data);
     } catch (e) {
-      alert('Error: ' + e.message);
+      console.error(e);
     } finally {
       setLoading(false);
     }
   };
 
+  // 智能路由逻辑
+  const handleEnterProject = (project) => {
+    const status = project.status;
+    
+    // 阶段1：角色相关 -> 去角色工坊
+    if (['created', 'analyzing_characters', 'characters_ready'].includes(status)) {
+      navigate(`/project/${project.id}/workshop`);
+    } 
+    // 阶段2：剧本与合成 -> 去演播室
+    else if (['parsing_script', 'script_ready', 'synthesizing', 'completed'].includes(status)) {
+      navigate(`/project/${project.id}/studio`);
+    } 
+    // 默认 Fallback
+    else {
+      navigate(`/project/${project.id}/workshop`);
+    }
+  };
+
+  const handleDelete = async (e, pid) => {
+    e.stopPropagation();
+    if (!window.confirm("确定要删除这个项目吗？")) return;
+    await deleteProject(pid);
+    setProjects(prev => prev.filter(p => p.id !== pid));
+  };
+
+  // 状态标签渲染辅助函数
+  const renderStatusBadge = (status) => {
+    const map = {
+      'created': { color: 'bg-gray-100 text-gray-600', text: '初始化' },
+      'analyzing_characters': { color: 'bg-blue-100 text-blue-700', text: '🔵 角色分析中' },
+      'characters_ready': { color: 'bg-green-100 text-green-700', text: '🟢 角色就绪' },
+      'parsing_script': { color: 'bg-yellow-100 text-yellow-700', text: '剧本切分中' },
+      'synthesizing': { color: 'bg-indigo-100 text-indigo-700', text: '🟣 合成中' },
+      'completed': { color: 'bg-emerald-100 text-emerald-700', text: '✅ 已完成' },
+    };
+    const config = map[status] || map['created'];
+    return (
+      <span className={`px-2 py-0.5 rounded text-xs font-bold ${config.color}`}>
+        {config.text}
+      </span>
+    );
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 font-sans text-slate-800">
+    <div className="min-h-screen bg-gray-50 font-sans text-slate-800">
       
-      {/* 🔴 挂载弹窗组件 */}
+      {/* 弹窗挂载 */}
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      <CreateProjectModal 
+        isOpen={isCreateOpen} 
+        onClose={() => setIsCreateOpen(false)} 
+        onCreated={(newProject) => {
+            // 将新项目插入到列表最前面
+            setProjects([newProject, ...projects]);
+        }} 
+      />
 
-      <div className="max-w-3xl w-full bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col md:flex-row relative">
+      {/* 顶部导航栏 */}
+      <header className="bg-white border-b px-6 py-3 flex justify-between items-center sticky top-0 z-10 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">Q</div>
+          <h1 className="font-bold text-xl tracking-tight">Qwen3-DubFlow</h1>
+        </div>
+        <div className="flex items-center gap-3">
+          <a href="https://github.com" target="_blank" rel="noreferrer" className="p-2 text-gray-400 hover:text-gray-800 transition-colors">
+            <Github size={20} />
+          </a>
+          <button 
+            onClick={() => setIsSettingsOpen(true)}
+            className="flex items-center gap-2 px-3 py-1.5 border rounded-lg hover:bg-gray-50 text-sm font-medium text-gray-600 transition-colors"
+          >
+            <Settings size={16} /> 设置
+          </button>
+        </div>
+      </header>
+
+      {/* 主体内容区 */}
+      <main className="max-w-6xl mx-auto p-8">
         
-        {/* 🔴 右上角设置按钮 (绝对定位) */}
-        <button 
-           onClick={() => setIsSettingsOpen(true)}
-           className="absolute top-4 right-4 p-2 text-gray-400 hover:text-blue-600 hover:bg-gray-100 rounded-full transition-colors z-10"
-           title="系统设置"
-        >
-           <Settings size={20} />
-        </button>
-
-        {/* 左侧装饰 */}
-        <div className="hidden md:flex bg-blue-600 w-1/3 flex-col items-center justify-center p-8 text-white text-center">
-          <div className="bg-white/10 p-4 rounded-full mb-6">
-            <BookOpen size={48} className="text-white" />
-          </div>
-          {/* 🔴 更名 */}
-          <h1 className="text-2xl font-bold mb-2">DubFlow</h1> 
-          <p className="text-blue-100 text-sm leading-relaxed opacity-90">
-            全自动 AI 配音工作台
-          </p>
+        {/* 标题与筛选 (预留) */}
+        <div className="flex justify-between items-end mb-6">
+           <div>
+             <h2 className="text-2xl font-bold text-gray-900">我的项目</h2>
+             <p className="text-gray-500 text-sm mt-1">管理您的小说配音工程</p>
+           </div>
+           {/* 未来可以加筛选器 */}
         </div>
 
-        {/* 右侧表单 */}
-        <div className="flex-1 p-8 flex flex-col h-full">
-          <h2 className="text-xl font-bold mb-6 text-gray-800 flex items-center gap-2">
-            <span className="bg-blue-100 text-blue-600 p-1.5 rounded-lg"><FileText size={20}/></span>
-            创建新项目
-          </h2>
+        {/* 项目网格列表 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          
+          {/* 1. 新建卡片 (Big Button) */}
+          <div 
+            onClick={() => setIsCreateOpen(true)}
+            className="group h-[220px] border-2 border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-500 hover:bg-blue-50/50 transition-all active:scale-[0.98]"
+          >
+             <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 mb-4 group-hover:scale-110 transition-transform shadow-sm">
+               <Plus size={32} />
+             </div>
+             <span className="font-bold text-gray-600 group-hover:text-blue-600">新建项目</span>
+             <span className="text-xs text-gray-400 mt-1">支持 .txt 导入</span>
+          </div>
 
-          <div className="space-y-5 flex-1 flex flex-col">
-            {/* 项目名称 */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">项目名称</label>
-              <input 
-                className="w-full border border-gray-200 bg-gray-50 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
-                value={title}
-                onChange={e => setTitle(e.target.value)}
-                placeholder="例如：斗破苍穹第一章"
-              />
-            </div>
+          {/* 2. 项目列表渲染 */}
+          {loading ? (
+             <div className="col-span-full text-center py-20 text-gray-400">加载中...</div>
+          ) : projects.map(project => (
+             <div 
+               key={project.id}
+               onClick={() => handleEnterProject(project)}
+               className="bg-white rounded-2xl border border-gray-200 p-5 cursor-pointer hover:shadow-lg hover:border-blue-200 transition-all group flex flex-col h-[220px] relative"
+             >
+                {/* 顶部：标题与更多 */}
+                <div className="flex justify-between items-start mb-3">
+                   <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500 shrink-0">
+                     <FolderOpen size={20}/>
+                   </div>
+                   <button 
+                     onClick={(e) => handleDelete(e, project.id)}
+                     className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                     title="删除项目"
+                   >
+                     <Trash2 size={16}/>
+                   </button>
+                </div>
 
-            {/* 文件上传/拖拽 */}
-            {!text && (
-              <div>
-                 <input type="file" ref={fileInputRef} className="hidden" accept=".txt" onChange={handleFileSelect} />
-                 <div 
-                   onClick={() => fileInputRef.current.click()}
-                   onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
-                   className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all group ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-blue-400 hover:bg-gray-50'}`}
-                 >
-                    <div className="bg-white p-3 rounded-full shadow-sm w-fit mx-auto mb-3 group-hover:scale-110 transition-transform"><Upload size={24} className="text-blue-600" /></div>
-                    <p className="text-sm text-gray-600 font-medium">点击上传 或 拖拽 .txt 文件</p>
-                 </div>
-              </div>
-            )}
+                {/* 标题 */}
+                <h3 className="font-bold text-lg text-gray-900 line-clamp-2 mb-2 group-hover:text-blue-600 transition-colors">
+                  {project.name}
+                </h3>
 
-            {/* 文本编辑区 (带字数统计) */}
-            <div className="relative group flex-1 flex flex-col">
-              <div className="flex-1 relative">
-                <textarea 
-                  className="w-full h-48 border border-gray-200 p-3 pb-8 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all resize-none text-sm leading-relaxed text-gray-600 custom-scrollbar" 
-                  value={text}
-                  onChange={e => setText(e.target.value)}
-                  placeholder="或者直接在这里粘贴小说正文..."
-                />
-                
-                {/* 清空按钮 */}
-                {text && (
-                   <button onClick={() => setText('')} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50 transition-colors" title="清空文本"><X size={16}/></button>
-                )}
-              </div>
+                {/* 状态标签 */}
+                <div className="mb-auto">
+                  {renderStatusBadge(project.status)}
+                </div>
 
-              {/* ✨✨✨ 字数统计与时长预估栏 ✨✨✨ */}
-              <div className="mt-2 flex justify-between items-center text-xs font-medium text-gray-500 bg-gray-50 px-3 py-2 rounded-lg border border-gray-100">
-                <div className="flex items-center gap-4">
-                   <span className="flex items-center gap-1.5">
-                      <AlignLeft size={14} className="text-blue-500"/> 
-                      <span>{stats.charCount.toLocaleString()} 字</span>
-                   </span>
-                   {stats.charCount > 0 && (
-                     <span className="flex items-center gap-1.5 text-orange-600 bg-orange-50 px-2 py-0.5 rounded">
-                        <Clock size={14}/> 
-                        <span>预估时长: {stats.timeString}</span>
-                     </span>
+                {/* 底部信息：进度条 & 时间 */}
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                   {/* 如果在合成中，显示进度条 */}
+                   {project.status === 'synthesizing' && project.progress ? (
+                      <div className="mb-2">
+                        <div className="flex justify-between text-xs text-gray-500 mb-1">
+                          <span>合成进度</span>
+                          <span>{project.progress.current}/{project.progress.total}</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-indigo-500 rounded-full transition-all duration-500" 
+                            style={{width: `${(project.progress.current / project.progress.total) * 100}%`}}
+                          ></div>
+                        </div>
+                      </div>
+                   ) : (
+                      // 否则显示时间
+                      <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                        <Clock size={12}/>
+                        {new Date(project.created_at).toLocaleDateString()}
+                      </div>
                    )}
                 </div>
-                {stats.charCount > 5000 && <span className="text-red-500">文本较长，建议分段</span>}
-              </div>
-            </div>
+             </div>
+          ))}
 
-            {/* 提交按钮 */}
-            <button 
-              onClick={handleCreate} disabled={loading}
-              className={`w-full py-3.5 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-200 ${loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 active:scale-[0.98]'}`}
-            >
-              {loading ? (
-                <> <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> <span>AI 分析中...</span> </>
-              ) : (
-                <> 开始创作 <ArrowRight size={20} /> </>
-              )}
-            </button>
-          </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
