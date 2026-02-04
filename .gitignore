@@ -1,5 +1,5 @@
 models_deploy/model/*
-
+backend/storage/*
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
