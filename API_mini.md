@@ -12,8 +12,6 @@
 
 ```
 
-# 文件树
-
 Qwen3-DubFlow/
 ├── .env                        # [全局配置] 根目录环境变量 (供 docker-compose 读取，如 PROJECT_NAME, GPU_IDS)
 ├── docker-compose.yml          # [核心编排] 定义 frontend 和 backend 服务
@@ -284,9 +282,7 @@ A. appearance (外观与交互)
 | Key | Label | Type | Options / Default | 说明 |
 | :--- | :--- | :--- | :--- | :--- |
 | `app.theme_mode` | 主题模式 | `select` | `["light", "dark", "system"]` | 明亮/暗黑/跟随系统 |
-| `app.primary_color` | 主题色 | `color` | `#1677ff` | 品牌主色调 |
 | `app.language` | 语言 | `select` | `["zh-CN", "en-US"]` | 国际化支持 |
-| `app.font_size` | 字体大小 | `select` | `["small", "medium", "large"]` | 针对视力不好的用户 |
 
 B. llm_settings (LLM设置)
 
