@@ -12,7 +12,7 @@ MODEL_DIR="$SCRIPT_DIR/model"
 
 
 echo "Starting Qwen3-TTS VoiceDesign server on port 8000..."
-vllm-omni serve "$MODEL_DIR/Qwen3-TTS-VoiceDesign" \
+vllm-omni serve "$MODEL_DIR/Qwen3-TTS-12Hz-1.7B-VoiceDesign" \
     --stage-configs-path "$CONFIG_PATH" \
     --host 0.0.0.0 \
     --port 8000 \
@@ -22,7 +22,7 @@ vllm-omni serve "$MODEL_DIR/Qwen3-TTS-VoiceDesign" \
     --omni &
 
 echo "Starting Qwen3-TTS Base server on port 8001..."
-vllm-omni serve "$MODEL_DIR/Qwen3-TTS-Base" \
+vllm-omni serve "$MODEL_DIR/Qwen3-TTS-12Hz-1.7B-Base" \
     --stage-configs-path "$CONFIG_PATH" \
     --host 0.0.0.0 \
     --port 8001 \
