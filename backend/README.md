@@ -17,8 +17,14 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 
 cd backend
 
-// 换国内源
+// 换国内源（linux & Mac）
 export UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+
+// 换国内源（windows）
+$env:UV_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple"
+
+// 设置环境变量
+cp .env.example .env
 
 uv run main.py
 
