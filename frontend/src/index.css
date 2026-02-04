@@ -2,6 +2,72 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 引入类似原神的字体 (Cinzel 用于标题，Quicksand 用于正文) */
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Quicksand:wght@500;700&display=swap');
+
 body {
-  background-color: #f8f9fa;
+  font-family: 'Quicksand', sans-serif;
+  background-color: #F0F2F5; /* 基础底色 */
+  color: #495366; /* 游戏内的深灰色文字 */
+  
+  /* 提瓦特背景图模拟 (米色底 + 星星点缀) */
+  background: 
+    radial-gradient(circle at 50% 50%, rgba(255,255,255,0.8) 0%, rgba(240,242,245,1) 100%),
+    url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 0l2 28 28 2-28 2-2 28-2-28-28-2 28-2z' fill='%23D3BC8E' fill-opacity='0.05' fill-rule='evenodd'/%3E%3C/svg%3E");
+}
+
+/* 滚动条 - 金色风格 */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #ECE5D8;
+}
+::-webkit-scrollbar-thumb {
+  background: #D3BC8E;
+  border-radius: 4px;
+  border: 2px solid #ECE5D8;
+}
+
+@layer components {
+  /* 原神卡片：米色底，微弱的阴影，圆角 */
+  .genshin-card {
+    @apply bg-[#EBE5D9] border-2 border-[#D8CBA8] rounded-[2rem] shadow-sm relative overflow-hidden;
+  }
+  
+  /* 派蒙菜单风格：深色半透明背景，白色文字，金色边框 */
+  .paimon-menu {
+    @apply bg-[#373F52]/90 backdrop-blur-md border border-[#6A7080] text-[#ECE5D8] rounded-[32px] shadow-xl;
+  }
+
+  /* 主按钮：确认/祈愿风格 (金色渐变) */
+  .genshin-btn-primary {
+    @apply bg-gradient-to-b from-[#F2EBDC] to-[#D3BC8E] border border-[#CBAA76] 
+    text-[#4A5366] font-bold rounded-full px-6 py-2 shadow-md
+    hover:brightness-110 active:scale-95 transition-all duration-200
+    flex items-center justify-center gap-2 relative overflow-hidden;
+  }
+  
+  /* 次要按钮：深色圆圈 (类似取消/返回) */
+  .genshin-btn-circle {
+    @apply w-10 h-10 rounded-full bg-[#EBE5D9] border-2 border-[#D3BC8E] 
+    text-[#4A5366] flex items-center justify-center shadow-sm 
+    hover:bg-white transition-colors active:scale-90;
+  }
+
+  /* 输入框：米色纸张感 */
+  .genshin-input {
+    @apply bg-[#F7F3EB] border-2 border-[#D8CBA8] rounded-xl text-[#4A5366] placeholder-[#A4AAB6]
+    focus:border-[#D3BC8E] focus:ring-2 focus:ring-[#D3BC8E]/20 outline-none transition-all;
+  }
+
+  /* 标题字体 */
+  .font-genshin {
+    font-family: 'Cinzel', serif;
+  }
+}
+
+/* 选中动画 */
+.selected-ring {
+  box-shadow: 0 0 0 3px #D3BC8E, 0 0 0 6px #F7F3EB;
 }
