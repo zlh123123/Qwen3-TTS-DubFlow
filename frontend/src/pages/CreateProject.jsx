@@ -63,21 +63,30 @@ export default function CreateProject() {
 
   // 状态标签渲染：匹配 API 文档字段
   const StatusTag = ({ s }) => {
-    const map = {
-      'created': { text: t('status_created'), cls: 'text-gray-500 bg-gray-100 border-gray-200' },
-      'analyzing': { text: t('status_analyzing'), cls: 'text-blue-500 bg-blue-50 border-blue-200 animate-pulse' },
-      'characters_ready': { text: '角色就绪', cls: 'text-cyan-600 bg-cyan-50 border-cyan-200' },
-      'script_ready': { text: '剧本就绪', cls: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
-      'synthesizing': { text: t('status_synthesizing'), cls: 'text-purple-600 bg-purple-50 border-purple-200' },
-      'completed': { text: t('status_completed'), cls: 'text-[#9A7D48] bg-[#F5EBDA] border-[#D3BC8E]' },
-    };
-    const config = map[s] || { text: s, cls: 'text-gray-400 border-gray-200' };
-    return (
-      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors ${config.cls}`}>
-        {config.text}
-      </span>
-    );
+  const { t } = useLang();
+  
+  // 核心映射表：确保 key 与后端 ProjectResponse 中的 state 字符串一致
+  const map = {
+    'created': { text: t('status_created'), cls: 'text-gray-500 bg-gray-100 border-gray-200' },
+    'analyzing': { text: t('status_analyzing'), cls: 'text-blue-500 bg-blue-50 border-blue-200 animate-pulse' },
+    'characters_ready': { text: t('status_characters_ready'), cls: 'text-cyan-600 bg-cyan-50 border-cyan-200' },
+    'script_ready': { text: t('status_script_ready'), cls: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
+    'synthesizing': { text: t('status_synthesizing'), cls: 'text-purple-600 bg-purple-50 border-purple-200' },
+    'completed': { text: t('status_completed'), cls: 'text-[#9A7D48] bg-[#F5EBDA] border-[#D3BC8E]' },
   };
+
+  // 🛡️ 绝对兜底：如果 s 为空或 map 找不到，显示原始字符串且不崩溃
+  const config = map[s] || { 
+    text: s || 'Initializing...', 
+    cls: 'text-gray-400 bg-gray-50 border-gray-200' 
+  };
+
+  return (
+    <span className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors ${config.cls}`}>
+      {config.text}
+    </span>
+  );
+};
 
   if (loading) return (
     <div className="h-screen flex items-center justify-center text-[#D3BC8E] font-bold bg-[#F0F2F5] dark:bg-[#1B1D22]">
@@ -171,9 +180,11 @@ export default function CreateProject() {
 
                 <div className="mt-4 pt-4 border-t-2 border-[#D8CBA8]/20 flex justify-between items-center text-xs text-[#8C7D6B] font-bold">
                    <div className="flex items-center gap-1.5 transition-colors">
-                     <Clock size={14} className="text-[#D3BC8E]"/>
-                     <span>{new Date(p.created_at).toLocaleDateString()}</span>
-                   </div>
+                    <Clock size={14} className="text-[#D3BC8E]"/>
+                    <span>
+                      {p.created_at ? new Date(p.created_at).toLocaleDateString() : '---'}
+                    </span>
+                  </div>
                    <ChevronRight size={14} className="text-[#D3BC8E] transition-transform group-hover:translate-x-1"/>
                 </div>
              </div>
