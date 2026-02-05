@@ -1,27 +1,31 @@
 from pydantic import BaseModel
-from typing import List, Optional, Any, Dict
+from typing import Optional, List, Any
 
-# 单个配置项
-class ConfigItem(BaseModel):
-    key: str
-    value: Optional[str]
-    label: str
-    type: str
-    group: str
-    options: Optional[List[str]] = None
-    default: Optional[str] = None
-    is_public: Optional[bool] = True
-    class Config:
-        from_attributes = True
-
-# 单个更新项 
-class ConfigUpdateItem(BaseModel):
+# front->back: 更新配置
+class ConfigUpdate(BaseModel):
     key: str
     value: str
 
-# 批量更新请求
-class ConfigUpdateRequest(BaseModel):
-    updates: List[ConfigUpdateItem]
+class ConfigBatchUpdate(BaseModel):
+    updates: List[ConfigUpdate]
 
-# GET 返回的完整结构 (字典: group_name -> list of items)
-SettingsResponse = Dict[str, List[ConfigItem]]
+# back->front: 配置响应
+class ConfigResponse(BaseModel):
+    key: str
+    value: Optional[str] = None
+    group: str
+    label: str
+    type: str  # password/text/select/boolean/number/color
+    options: Optional[List[str]] = None
+    default: Optional[str] = None
+    is_public: bool
+
+    class Config:
+        from_attributes = True
+
+# back->front: 按分组返回配置
+class ConfigGroupResponse(BaseModel):
+    appearance: List[ConfigResponse] = []
+    llm_settings: List[ConfigResponse] = []
+    tts_settings: List[ConfigResponse] = []
+    synthesis_config: List[ConfigResponse] = []
