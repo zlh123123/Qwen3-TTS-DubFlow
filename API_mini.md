@@ -4,9 +4,10 @@
 + 前端：React
 + 后端：FastAPI + SQLite
 + AI
-  + 本地部署：采用基于pytorch库的Qwen3TTSModel部署，此部分将集成到后端
-  + Autodl部署：采用vllm-omni推理框架，速度更快，穿透到本地主机
-  + 调用阿里云API
+  + 本地部署：采用基于pytorch库的Qwen3TTSModel部署，此部分将集成到后端（不推荐，速度慢，且对显卡配置有要求，易出现环境问题）
+  + Autodl部署：采用vllm-omni推理框架，速度更快，穿透到本地主机（推荐大部分用户使用）
+  + 调用阿里云API（推荐大部分用户使用，与Autodl部署相比成本更低）
+  + vllm-omni部署（仅推荐linux用户或自有linux的高性能服务器的用户使用，不推荐windows和mac用户部署，易出现环境问题）
 
 # 文件树
 
@@ -31,9 +32,10 @@ Qwen3-DubFlow/
 │       └── index.js            # 入口文件
 │
 ├── backend/                    # [后端服务] FastAPI
-│   ├── Dockerfile              # [构建] Python 环境构建 (安装 uv, 依赖)。后端镜像将发布两个：1.dubflow-backend:lite (仅支持 AutoDL/阿里云，无 PyTorch，体积小)2.dubflow-backend:full (支持本地运行/AutoDL/阿里云，含 PyTorch，体积大)
-│   ├── entrypoint.sh           # [启动] 启动脚本 (判断是启动 Web 还是 Celery Worker)
-│   ├── .env                    # [局部配置] 后端专用环境变量 (DB_URL, REDIS_URL)
+│   ├── Dockerfile              # [构建] Python 环境构建 (安装 uv, 依赖)。
+后端镜像将发布两个：1.dubflow-backend:lite (仅支持 AutoDL/阿里云，无 PyTorch，体积小)2.dubflow-backend:full (支持本地运行/AutoDL/阿里云，含 PyTorch，体积大)
+│   ├── entrypoint.sh           # [启动] 启动脚本 
+│   ├── .env                    # [局部配置] 后端专用环境变量 (DB_URL)
 │   ├── pyproject.toml          # [依赖] uv 依赖管理
 │   ├── uv.lock                 # [依赖] 锁定文件
 │   │
@@ -208,7 +210,7 @@ TTS 设置：选择后端 (Local/Cloud)、显卡指定。（这个v1版不需要
 | 状态值 (State) | 中文含义 | 前端行为逻辑 | 触发条件 |
 | :--- | :--- | :--- | :--- |
 | **analyzing_characters** | 角色分析中 | 在首页上不允许用户点击这个project，前端可以显示转圈orloading这种 | project的内容存进数据库。用户已经上传了小说文件，点击“分析角色”按钮，Worker 开始跑 LLM。 |
-| **characters_ready** | 角色待确认其音色 | 点击进入“角色工坊 (Page 2)”。 | LLM 分析完成，Character 表有数据了。现在用户开始试听并修改音色 |
+| **characters_ready** | 角色待用户确认其音色 | 点击进入“角色工坊 (Page 2)”。 | LLM 分析完成，Character 表有数据了。现在用户开始试听并修改音色 |
 | **parsing_script** | 剧本切分中 | 前端这块回到首页，列表页显示 Loading；禁止操作。 | 用户在 Page 2 点击“生成剧本”，Worker 开始跑 LLM。此时用户就不能再回到“角色工坊 (Page 2)”了 |
 | **script_ready** | 剧本就绪/待合成 | 用户在首页点击项目后，进入“演播室 (Page 3)”。 | 剧本切分完成，ScriptLine 表有数据了。 |
 | **synthesizing** | 合成进行中 | 列表页显示进度条；Page 3 锁定批量合成按钮。 | 用户点击了“批量合成”，后台正在疯狂跑 GPU。 |
@@ -229,6 +231,7 @@ Character (角色表)
 | age | String | 可以是数字，也可以是大致的描述，例如中年人 |
 | description | Text | 人设描述 (用于 LLM 指令) |
 | prompt | Text | 音色提示词 (Timbre Prompt) |
+| is_confirmed | Boolean | 用户是否已经确认音色 |
 | ref_audio_path | String | 定妆音频路径 (用户确认后的 wav 路径) |
 | duration | Float | 音频时长(秒)|
 | ref_text | String | 生成定妆音频时用的那句话 |
@@ -287,21 +290,31 @@ B. llm_settings (LLM设置)
 
 | Key | Label | Type | Default | 说明 |
 | :--- | :--- | :--- | :--- | :--- |
-| `llm.active_provider` | 当前 LLM 服务商 | `select` | `deepseek` | 下拉选 DeepSeek/Qwen/Local |
+| `llm.active_provider` | 当前 LLM 服务商 | `select` | `deepseek` | 下拉选 DeepSeek/Qwen/Self-defined |
 | `llm.deepseek.api_key` | DeepSeek API Key | `password` | - | 存密钥，前端显示为 ****** |
 | `llm.qwen.api_key` | Qwen API Key | `password` | - | 存密钥，前端显示为 ****** |
-| `llm.local.url` | 本地 LLM 地址 | `text` | `http://localhost:11434` | Ollama 等本地服务地址 |
+| `llm.selfdef.url` | 自定义 LLM 地址 | `text` | `http://localhost:11434` | Ollama 等本地服务地址 or 其他LLM供应商的API URL |
+| `llm.selfdef.api_key` | 自定义 LLM API Key | `password` | - | 本地服务不需要key，其他LLM供应商需要key |
 
 C. tts_settings (语音合成设置)
 
 | Key | Label | Type | Default | 说明 |
 | :--- | :--- | :--- | :--- | :--- |
-| `tts.active_backend` | TTS 后端类型 | `select` | `local_docker` | Local / Remote(AutoDL) / Aliyun |
-| `tts.local.url` | 本地服务地址 | `text` | `http://tts-base:8000` | Docker 内部地址 |
-| `tts.remote.url` | 远程服务地址 | `text` | - | AutoDL 的公网穿透地址 |
-| `tts.remote.token` | 远程鉴权 Token | `password` | - | 防止被白嫖的简单的密码，这个需要确认autodl里真有这东西？ |
-| `tts.aliyun.app_key` | 阿里云 AppKey | `text` | - | 第三方接口必填 |
-| `tts.aliyun.token` | 阿里云 Token | `password` | - | 第三方接口必填 |
+| `tts.backend` | TTS 后端类型 | `select` | - | 选项: local_pytorch / local_vllm / autodl / aliyun |
+| **本地pytorch部署** | | | | |
+| `tts.local.model_base_path` | 克隆模型路径 | `text` | - | - |
+| `tts.local.model_vd_path` | 设计模型路径 | `text` | - | - |
+| `tts.local.device` | 计算设备 | `select` | cuda | cuda or cpu |
+| **本地vllm部署** | | | | |
+| `tts.vllm.url` | vllm服务地址 | `text` | `http://localhost:8000` | Docker 容器内部地址 |
+| **autodl穿透** | | | | |
+| `tts.autodl.base_port` | 基础模型本地端口 | `text` | 6006 | - |
+| `tts.autodl.vd_port` | 捏人模型本地端口 | `text` | 6007 | - |
+| **阿里云API** | | | | |
+| `tts.aliyun.api_key` | DashScope API Key | `password` | - | - |
+| `tts.aliyun.region` | 服务区域 | `select` | `beijing` | 选项: beijing / singapore，国内beijing，国外 singapore |
+
+
 
 D. synthesis_config (合成策略与高级参数)
 
@@ -322,7 +335,7 @@ D. synthesis_config (合成策略与高级参数)
 
 除了用户配置表外，项目后端运行还需要一些配置，这些配置放在.env环境变量中，仅开发人员使用，普通用户不使用
 
-+ .env中包括数据库地址、Redis 端口、密钥这些。由开发/运维人员管理，代码运行前就必须存在，一旦修改通常需要重启服务。
++ .env中包括数据库地址、密钥这些。由开发/运维人员管理，代码运行前就必须存在，一旦修改通常需要重启服务。
 + UserConfig则由用户在前端 UI 修改，实时生效，不需要重启服务。
 
 # API文档
@@ -676,6 +689,11 @@ Response (Failed - 失败):
 + 提供字幕文件导出功能
 + 为剧本切分、批量合成提供进度条、显示剩余时间等
 + 页面 2: 角色工坊 支持用户自己上传自己的参考音频
++ 对于耗时任务添加“取消任务”API
++ 对于每个project，状态机为fail时，支持自动回到上一个状态重试
++ 对于任务task，假如正在有任务运行时后端宕机了，那project的状态就会一直卡比，要支持这里的异常处理
++ 返回所有project和返回所有character目前API为全部返回，在数据量少的个人场景可用；但是返回所有scripts数据量可能较大（与小说字数强相关），需要优化，例如加上分页返回的策略
+
 
 ---
 
