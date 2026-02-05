@@ -30,7 +30,7 @@ Qwen3-DubFlow/
 │       ├── App.js              # 根组件
 │       └── index.js            # 入口文件
 │
-├── backend/                    # [后端服务] FastAPI + Celery
+├── backend/                    # [后端服务] FastAPI
 │   ├── Dockerfile              # [构建] Python 环境构建 (安装 uv, 依赖)。后端镜像将发布两个：1.dubflow-backend:lite (仅支持 AutoDL/阿里云，无 PyTorch，体积小)2.dubflow-backend:full (支持本地运行/AutoDL/阿里云，含 PyTorch，体积大)
 │   ├── entrypoint.sh           # [启动] 启动脚本 (判断是启动 Web 还是 Celery Worker)
 │   ├── .env                    # [局部配置] 后端专用环境变量 (DB_URL, REDIS_URL)
@@ -207,14 +207,13 @@ TTS 设置：选择后端 (Local/Cloud)、显卡指定。（这个v1版不需要
 
 | 状态值 (State) | 中文含义 | 前端行为逻辑 | 触发条件 |
 | :--- | :--- | :--- | :--- |
-| **created** | 已创建/待处理 | 显示在列表，点击进入“上传页”或“角色页”。 | 项目刚 insert 到数据库，未进行任何 AI 操作。 |
-| **analyzing_characters** | 角色分析中 | 列表页显示 Loading 动画；禁止进入详情页。 | 用户点击“分析角色”按钮，Worker 开始跑 LLM。 |
-| **characters_ready** | 角色待确认 | 点击进入“角色工坊 (Page 2)”。 | LLM 分析完成，Character 表有数据了。 |
-| **parsing_script** | 剧本切分中 | 列表页显示 Loading；禁止操作。 | 用户在 Page 2 点击“生成剧本”，Worker 开始跑 LLM。 |
-| **script_ready** | 剧本就绪/待合成 | 点击进入“演播室 (Page 3)”。 | 剧本切分完成，ScriptLine 表有数据了。 |
+| **analyzing_characters** | 角色分析中 | 在首页上不允许用户点击这个project，前端可以显示转圈orloading这种 | project的内容存进数据库。用户已经上传了小说文件，点击“分析角色”按钮，Worker 开始跑 LLM。 |
+| **characters_ready** | 角色待确认其音色 | 点击进入“角色工坊 (Page 2)”。 | LLM 分析完成，Character 表有数据了。现在用户开始试听并修改音色 |
+| **parsing_script** | 剧本切分中 | 前端这块回到首页，列表页显示 Loading；禁止操作。 | 用户在 Page 2 点击“生成剧本”，Worker 开始跑 LLM。此时用户就不能再回到“角色工坊 (Page 2)”了 |
+| **script_ready** | 剧本就绪/待合成 | 用户在首页点击项目后，进入“演播室 (Page 3)”。 | 剧本切分完成，ScriptLine 表有数据了。 |
 | **synthesizing** | 合成进行中 | 列表页显示进度条；Page 3 锁定批量合成按钮。 | 用户点击了“批量合成”，后台正在疯狂跑 GPU。 |
 | **completed** | 已完成 | 列表页显示“完成”角标；Page 3 允许导出。 | 所有的 ScriptLine status 都变成了 synthesized。 |
-| **failed** | 处理失败 | 列表页显示红色警告，允许用户“重试”。 | 任何一个异步任务 (Celery) 抛出异常 (如显存溢出、LLM 超时)。 |
+| **failed** | 处理失败 | 列表页显示红色警告，允许用户“重试”。 | 任何一个任务抛出异常 (如显存溢出、LLM 超时)。 |
 
 
 每个Project中包含一张角色表和对话表。其构成为：
@@ -364,7 +363,6 @@ Response：
       "id": "uuid-001",
       "name": "斗破苍穹",
       "state": "synthesizing",
-      "progress": { "finished": 50, "total": 100 }, // 可选，方便前端展示
       "created_at": "2026-02-02T10:00:00"
     },
     {
@@ -671,12 +669,13 @@ Response (Failed - 失败):
 + 两个对话之间支持控制静音片段时间长短
 + 输入文件类型支持多样化
 + 合成的东西更多，包括不限于游戏、播客、试题听力、漫画等
-+ TTS模型支持autodl穿透与阿里云API接入
 + 用户在每次reroll后都可能觉得之前的更好，加入历史记录更难
 + 添加批量导出/打包功能，导出zip这种
 + 对合成音频支持音量控制
 + 引入类似剪辑软件的波形编辑器，用户可通过拖拽音频块实现整段音频的编辑
 + 提供字幕文件导出功能
++ 为剧本切分、批量合成提供进度条、显示剩余时间等
++ 页面 2: 角色工坊 支持用户自己上传自己的参考音频
 
 ---
 
