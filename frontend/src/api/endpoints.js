@@ -1,215 +1,114 @@
 import client from './client';
 
-// ✅ 开启 Mock 模式：这就意味着不请求后端，直接返回假数据
-const USE_MOCK = true;
+/**
+ * 🛠️ 生产模式建议将 USE_MOCK 设为 false
+ * 联动后端 API 地址：/api/projects, /api/settings 等
+ */
+const USE_MOCK = false; 
 
-// 模拟网络延迟 (1秒)
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// ==========================================
+// 1. 项目仪表盘 (Dashboard)
+// ==========================================
 
-// --- 1. 项目相关 ---
-// 获取项目列表
+// 获取所有项目列表
 export const getProjects = async () => {
   if (USE_MOCK) {
-    await delay(600);
     return {
-      data: [
-        { 
-          id: 'p-101', 
-          name: '斗破苍穹第一章', 
-          status: 'analyzing_characters', // 角色分析中
-          created_at: '2026-02-02T10:00:00Z',
-          progress: null 
-        },
-        { 
-          id: 'p-102', 
-          name: '凡人修仙传·第十回', 
-          status: 'characters_ready', // 待合成 (其实是待生成剧本)
-          created_at: '2026-02-01T14:30:00Z',
-          progress: null
-        },
-        { 
-          id: 'p-103', 
-          name: '三体·红岸基地', 
-          status: 'synthesizing', // 合成中
-          created_at: '2026-01-28T09:15:00Z',
-          progress: { current: 35, total: 100 } // 进度条数据
-        },
-        { 
-          id: 'p-104', 
-          name: '庆余年·范闲进京', 
-          status: 'completed', // 已完成
-          created_at: '2026-01-25T18:20:00Z',
-          progress: { current: 100, total: 100 }
-        }
-      ]
+      data: {
+        total: 2,
+        items: [
+          { id: "p1", name: "斗破苍穹", state: "synthesizing", created_at: "2026-02-02T10:00:00" },
+          { id: "p2", name: "凡人修仙传", state: "characters_ready", created_at: "2026-02-01T14:20:00" }
+        ]
+      }
     };
   }
   return client.get('/projects');
 };
 
-// 删除项目
-export const deleteProject = async (pid) => {
-  if (USE_MOCK) return { data: { success: true } };
-  return client.delete(`/projects/${pid}`);
-};
-
-// 创建项目 (稍微修改返回值以配合列表刷新)
+// 创建新项目
 export const createProject = async (data) => {
-  if (USE_MOCK) {
-    await delay(1000);
-    return { 
-      data: { 
-        id: `mock-${Date.now()}`, 
-        name: data.name, 
-        status: 'created',
-        created_at: new Date().toISOString() 
-      } 
-    };
-  }
+  // data: { name, content }
   return client.post('/projects', data);
 };
 
-// export const getProject = async (pid) => {
-//   if (USE_MOCK) return { data: { id: pid, name: '演示项目: 斗破苍穹' } };
-//   return client.get(`/projects/${pid}`);
-// };
-
-
-// --- 2. 角色相关 ---
-export const analyzeCharacters = async (pid) => {
-  if (USE_MOCK) return { data: { task_id: 'mock-task-analyze-001' } };
-  return client.post(`/projects/${pid}/characters/analyze`);
+// 获取单个项目详情 (用于状态路由判断)
+export const getProjectDetail = async (pid) => {
+  return client.get(`/projects/${pid}`);
 };
 
+// 删除项目 (级联删除)
+export const deleteProject = async (pid) => {
+  return client.delete(`/projects/${pid}`);
+};
+
+// ==========================================
+// 2. 角色工坊 (Workshop)
+// ==========================================
+
 export const getCharacters = async (pid) => {
-  if (USE_MOCK) {
-    await delay(600);
-    return {
-      data: [
-        { id: 101, name: 'Li Yunlong', desc: 'Middle-aged/Angry/Loud', active: true, avatar: '🪖' },
-        { id: 102, name: 'Zhao Gang', desc: 'Young/Calm/Intellectual', active: false, avatar: '👓' },
-        { id: 103, name: 'Fink Yunlong', desc: 'Female/Sarcastic', active: false, avatar: '👩' },
-        { id: 104, name: 'Monk Wei', desc: 'Strong/Loyal', active: false, avatar: '🥋' },
-      ]
-    };
-  }
   return client.get(`/projects/${pid}/characters`);
 };
 
+// 语音试听 (异步任务)
 export const previewVoice = async (data) => {
-  if (USE_MOCK) return { data: { task_id: 'mock-task-preview-001' } };
   return client.post('/voices/preview', data);
 };
 
+// 确认定妆
 export const confirmVoice = async (charId, taskId) => {
-  if (USE_MOCK) return { data: { message: 'ok' } };
   return client.post(`/characters/${charId}/confirm_voice`, { temp_audio_task_id: taskId });
 };
 
-// 模拟添加台词
-export const addLine = async (pid, prevLineId) => {
-  if (USE_MOCK) {
-    return {
-      data: {
-        id: Date.now(), // 生成临时ID
-        character_id: 101, // 默认分配给主角
-        character_name: 'Li Yunlong',
-        text: '（新增台词）',
-        status: 'pending',
-        audio_url: null
-      }
-    };
-  }
-  return client.post(`/projects/${pid}/script/lines`, { prev_line_id: prevLineId });
-};
+// ==========================================
+// 3. 演播室 (Studio)
+// ==========================================
 
-// 模拟删除台词
-export const deleteLine = async (lineId) => {
-  if (USE_MOCK) return { data: { success: true } };
-  return client.delete(`/script/${lineId}`);
-};
-
-// --- 3. 剧本与合成 ---
 export const getScript = async (pid) => {
-  if (USE_MOCK) {
-    await delay(500);
-    return {
-      data: [
-        { 
-          id: 5001, 
-          character_id: 101, 
-          character_name: 'Li Yunlong', 
-          text: '二营长！你他娘的意大利炮呢？给我拉上来！', 
-          status: 'synthesized', 
-          // 这里放一个公网可访问的音频用于测试
-          audio_url: 'https://p.scdn.co/mp3-preview/2f37da1d4221f40b9d1a98cd191f4d6f1646ad17' 
-        },
-        { 
-          id: 5002, 
-          character_id: 102, 
-          character_name: 'Zhao Gang', 
-          text: '老李，你冷静点！这可是敌人的阵地！', 
-          status: 'pending', 
-          audio_url: null 
-        },
-        { 
-          id: 5003, 
-          character_id: 101, 
-          character_name: 'Li Yunlong', 
-          text: '什么他娘的精锐，老子打的就是精锐！', 
-          status: 'pending', 
-          audio_url: null 
-        },
-      ]
-    };
-  }
   return client.get(`/projects/${pid}/script`);
 };
 
+export const addLine = async (pid, prevLineId) => {
+  return client.post(`/projects/${pid}/script/lines`, { prev_line_id: prevLineId });
+};
+
+export const deleteLine = async (lineId) => {
+  return client.delete(`/script/${lineId}`);
+};
+
+// 提交合成任务 (异步任务)
 export const synthesize = async (data) => {
-  if (USE_MOCK) return { data: { task_id: 'mock-task-syn-001' } };
+  // data: { project_id, line_ids }
   return client.post('/synthesis', data);
 };
 
-// --- 4. 通用轮询 (模拟异步任务完成) ---
+// ==========================================
+// 4. 任务系统 (Task Polling)
+// ==========================================
+
+// 轮询异步任务状态
 export const getTaskStatus = async (taskId) => {
-  if (USE_MOCK) {
-    // 假装等待 1.5 秒后任务成功
-    await delay(1500); 
-    return { 
-      data: { 
-        status: 'success', 
-        result: { 
-          // 返回一个假音频 URL
-          audio_url: 'https://p.scdn.co/mp3-preview/2f37da1d4221f40b9d1a98cd191f4d6f1646ad17',
-          message: 'Task Completed' 
-        } 
-      } 
-    };
-  }
   return client.get(`/tasks/${taskId}`);
 };
 
-// 获取设置
+// ==========================================
+// 5. 系统设置 (Settings)
+// ==========================================
+
 export const getSettings = async () => {
   if (USE_MOCK) {
     return {
       data: {
-        llm_provider: 'qwen', // 默认 qwen
-        api_key: '',          // 默认为空
-        base_url: 'http://localhost:11434/v1' // 本地部署常用地址
+        app: { theme_mode: 'light', language: 'zh-CN' },
+        llm: { active_provider: 'deepseek', deepseek: { api_key: '' }, qwen: { api_key: '' }, local: { url: 'http://localhost:11434' } },
+        tts: { active_backend: 'local_docker', local: { url: 'http://tts-base:8000' }, remote: { url: '', token: '' }, aliyun: { app_key: '', token: '' } },
+        syn: { default_speed: 1.0, silence_duration: 0.5, export_path: '/data/outputs', max_workers: 2, volume_gain: 1.0, audio_format: 'wav', auto_slice: true, text_clean: true }
       }
     };
   }
   return client.get('/settings');
 };
 
-// 更新设置
 export const updateSettings = async (settings) => {
-  if (USE_MOCK) {
-    await delay(500); // 模拟保存延迟
-    console.log("Settings Saved:", settings); // 方便调试看结果
-    return { data: { success: true } };
-  }
   return client.put('/settings', settings);
 };
