@@ -7,7 +7,9 @@ from models.task import Task
 from schemas.project import ProjectCreate, ProjectResponse
 import shutil
 import os
+import uuid
 from langdetect import detect, LangDetectException  
+
 
 
 router = APIRouter(prefix="/api/projects", tags=["Projects"])

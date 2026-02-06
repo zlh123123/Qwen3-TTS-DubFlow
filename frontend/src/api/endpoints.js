@@ -42,6 +42,11 @@ export const deleteProject = async (pid) => {
   return client.delete(`/projects/${pid}`);
 };
 
+// 调用角色分析 (异步)
+export const analyzeCharacters = async (pid) => {
+  return client.post(`/projects/${pid}/characters/analyze`);
+};
+
 // ==========================================
 // 2. 角色工坊 (Workshop)
 // ==========================================

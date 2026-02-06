@@ -298,6 +298,7 @@ B. llm_settings (LLM设置)
 | `llm.qwen.api_key` | Qwen API Key | `password` | - | 存密钥，前端显示为 ****** |
 | `llm.selfdef.url` | 自定义 LLM 地址 | `text` | `http://localhost:11434` | Ollama 等本地服务地址 or 其他LLM供应商的API URL |
 | `llm.selfdef.api_key` | 自定义 LLM API Key | `password` | - | 本地服务不需要key，其他LLM供应商需要key |
+| `llm.selfdef.model_name` | 自定义 LLM 名称 | `test` | - | 本地服务和其他LLM供应商需要模型名称 |
 
 C. tts_settings (语音合成设置)
 

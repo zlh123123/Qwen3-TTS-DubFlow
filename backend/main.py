@@ -1,12 +1,11 @@
-# backend/main.py
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base, SessionLocal
 from routers import projects, config  
 from utils.init_config import init_settings 
 from models import project, config as config_model 
-
+from workers.worker import start_worker
+from contextlib import asynccontextmanager
 import os
 
 # 创建 storage 目录
@@ -22,7 +21,12 @@ try:
 finally:
     db.close()
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start_worker()
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 # CORS 设置 
 app.add_middleware(

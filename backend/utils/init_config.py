@@ -35,6 +35,10 @@ DEFAULT_CONFIGS = [
         "key": "llm.selfdef.api_key", "group": "llm_settings", "label": "自定义 LLM API Key",
         "type": "password", "options": None, "default": "", "value": ""
     },
+        {
+        "key": "llm.selfdef.model_name", "group": "llm_settings", "label": "自定义 LLM 模型名称",
+        "type": "text", "options": None, "default": "", "value": ""
+    },
 
     # C. TTS Settings (语音合成设置)
     {
