@@ -7,6 +7,8 @@ from models.task import Task
 from schemas.project import ProjectCreate, ProjectResponse
 import shutil
 import os
+from langdetect import detect, LangDetectException  
+
 
 router = APIRouter(prefix="/api/projects", tags=["Projects"])
 
@@ -20,9 +22,28 @@ def get_projects(db: Session = Depends(get_db)):
 # 创建新项目
 @router.post("", response_model=ProjectResponse)
 def create_project(item: ProjectCreate, db: Session = Depends(get_db)):
+    supported_languages = {
+        'zh': 'Chinese',
+        'en': 'English',
+        'ja': 'Japanese',
+        'ko': 'Korean',
+        'de': 'German',
+        'fr': 'French',
+        'ru': 'Russian',
+        'pt': 'Portuguese',
+        'es': 'Spanish',
+        'it': 'Italian'
+    }
+    try:
+        detected_lang = detect(item.content)
+        language = supported_languages.get(detected_lang, 'Chinese')  
+    except LangDetectException:
+        language = 'unknown'  # 检测失败默认未知
+
     new_project = Project(
         name=item.name,
         raw_content=item.content,
+        language=language,  
         state="created"
     )
     db.add(new_project)
@@ -42,14 +63,10 @@ def get_project_detail(project_id: str, db: Session = Depends(get_db)):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # 100字预览
-    raw_content_preview = project.raw_content[:100] if project.raw_content else ""
-    
     return {
         "id": project.id,
         "name": project.name,
         "state": project.state,
-        "raw_content_preview": raw_content_preview
     }
 
 # 删除项目
