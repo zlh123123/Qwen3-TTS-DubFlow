@@ -209,6 +209,7 @@ TTS 设置：选择后端 (Local/Cloud)、显卡指定。（这个v1版不需要
 
 | 状态值 (State) | 中文含义 | 前端行为逻辑 | 触发条件 |
 | :--- | :--- | :--- | :--- |
+| **created** | 初始状态 | 在数据库中初始化一个project时的默认状态，理论上会马上进入analyzing_characters |
 | **analyzing_characters** | 角色分析中 | 在首页上不允许用户点击这个project，前端可以显示转圈orloading这种 | project的内容存进数据库。用户已经上传了小说文件，点击“分析角色”按钮，Worker 开始跑 LLM。 |
 | **characters_ready** | 角色待用户确认其音色 | 点击进入“角色工坊 (Page 2)”。 | LLM 分析完成，Character 表有数据了。现在用户开始试听并修改音色 |
 | **parsing_script** | 剧本切分中 | 前端这块回到首页，列表页显示 Loading；禁止操作。 | 用户在 Page 2 点击“生成剧本”，Worker 开始跑 LLM。此时用户就不能再回到“角色工坊 (Page 2)”了 |
@@ -257,10 +258,11 @@ Task (任务表)
 | 字段名 | 类型 | 说明 |
 | :--- | :--- | :--- |
 | id | String (UUID) | 任务 ID (对应 API 返回的 task_id) |
+| project_id | String (FK to projects.id) | 外键关联 Project，用于判断project所处的状态 |
 | type | String | 任务类型: analyze_char, parse_script, synthesis |
 | status | String | pending (排队), processing (进行中), success, failed |
-| payload | JSON/Text | 任务参数 (如: {"text": "你好", "char_id": 1}) |
-| result | JSON/Text | 任务结果 (如: {"audio_url": "/static/..."}) |
+| payload | JSON | 任务参数 (如: {"text": "你好", "char_id": 1}) |
+| result | JSON | 任务结果 (如: {"audio_url": "/static/..."}) |
 | error_msg | Text | 报错信息 |
 | created_at | DateTime | 用于排队顺序 (ORDER BY created_at) |
 
@@ -697,25 +699,19 @@ Response (Failed - 失败):
 
 ---
 
-书面版本：
-
-**核心算法与性能**
-
-+ 超长文本分析：优化上下文管理，支持百万字级长篇小说的分段增量分析。
-+ 并行切分加速：引入多线程机制，大幅提升 LLM 剧本切分效率。
-+ 异构后端接入：支持 AutoDL 穿透部署及阿里云等第三方 TTS API 接入。
-
-**音频编辑与增强**
-
-+ 环境音效集成：支持对话背景音 (BGM) 及环境音效 (SFX) 的自动/手动添加。
-+ 精细化节奏控制：支持自定义句间静音时长 (Silence Duration) 与呼吸感调整。
-+ 动态音量调节：支持单句及全局的音频增益/响度控制 (Gain/Loudness Control)。
-+ 可视化波形编辑：引入非线性编辑 (NLE) 轨道视图，支持拖拽调整时间轴与音频块剪辑。
-
-**工作流与交互体验**
-
-+ 多格式文件支持：扩展输入格式，支持 EPUB, PDF, DOCX 等文档导入。
-+ 多场景合成模版：新增游戏语音、播客 (Podcast)、听力试题、动态漫画等专用预设。
-+ Reroll 历史回溯：保留生成历史记录，支持版本对比与一键回退 (Undo/Redo)。
-+ 批量打包导出：支持按章节/角色归档，一键导出 ZIP 压缩包。
-+ 字幕同步导出：基于音频时间戳，自动生成 SRT/ASS 字幕文件。
+界面1的流程：
+场景 1：角色分析 (Analyze Characters)
+前端 (Page 1): 用户点击“开始分析”。
+API (Routers):
+接收请求。
+将 Project.state 设为 analyzing_characters (前端立即看到转圈)。
+创建 Task (type=analyze_char, project_id=xxx)。
+db.commit() 并返回 task_id。
+Worker:
+检测到 Pending 任务。
+Task 变 processing。
+LLM Handler 逻辑: 读取小说内容 -> 调用 LLM -> 解析 JSON -> 往 Character 表插入数据。
+Task 变 success。
+State Machine: Project.state 变 characters_ready。
+前端 (轮询):
+下一次轮询发现 state 变了，自动跳转到 Page 2。
