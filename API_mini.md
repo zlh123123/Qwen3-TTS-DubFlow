@@ -286,7 +286,7 @@ A. appearance (外观与交互)
 | Key | Label | Type | Options / Default | 说明 |
 | :--- | :--- | :--- | :--- | :--- |
 | `app.theme_mode` | 主题模式 | `select` | `["light", "dark", "system"]` | 明亮/暗黑/跟随系统 |
-| `app.language` | 语言 | `select` | `["zh-CN", "en-US"]` | 国际化支持 |
+| `app.language` | 语言 | `select` | `["zh-CN", "en-US", "ja-JP"]` | 国际化支持 |
 
 B. llm_settings (LLM设置)
 
