@@ -106,11 +106,13 @@ def init_settings(db: Session):
         config_data = item.copy()
         
         # 将 options 列表转换为 JSON 字符串存储
-        if isinstance(config_data.get("options"), list):
-            config_data["options"] = json.dumps(config_data["options"])
+        # if isinstance(config_data.get("options"), list):
+        #     config_data["options"] = json.dumps(config_data["options"])
             
-        exists = db.query(Config).filter(Config.key == config_data["key"]).first()
+        # exists = db.query(Config).filter(Config.key == config_data["key"]).first()
         
+        exists = db.query(Config).filter(Config.key == config_data["key"]).first()
+
         if not exists:
             new_config = Config(**config_data)
             db.add(new_config)

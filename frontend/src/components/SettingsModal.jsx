@@ -1,190 +1,216 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Cpu, Mic, Settings as SettingsIcon, Sliders, RefreshCw, Monitor } from 'lucide-react';
+import { X, Monitor, Brain, Mic2, Settings2, Save, Loader2, ShieldCheck, Lock, Eye, EyeOff } from 'lucide-react';
 import * as API from '../api/endpoints';
 import { useLang } from '../contexts/LanguageContext';
 
 export default function SettingsModal({ open, close }) {
-  const { t, setLang, setTheme } = useLang();
+  const { setLang, setTheme } = useLang();
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('app');
+  const [activeTab, setActiveTab] = useState('appearance');
   
-  const [cfg, setCfg] = useState({
-    app: { theme_mode: 'system', language: 'zh-CN' },
-    llm: { active_provider: 'deepseek', deepseek: { api_key: '' }, qwen: { api_key: '' }, local: { url: '' } },
-    tts: { active_backend: 'local_docker', local: { url: '' }, remote: { url: '', token: '' }, aliyun: { app_key: '', token: '' } },
-    syn: { default_speed: 1.0, silence_duration: 0.5, export_path: '', max_workers: 2, volume_gain: 1.0, audio_format: 'wav', auto_slice: true, text_clean: true }
-  });
+  // meta 存储原始的分组数据，cfg 存储扁平化的键值对 {"key": "value"}
+  const [meta, setMeta] = useState(null);
+  const [cfg, setCfg] = useState({});
+  const [showPassword, setShowPassword] = useState({});
 
+  // 1. 初始化加载：适配方案 A (res 直接就是数据)
   useEffect(() => {
     if (open) {
+      setLoading(true);
       API.getSettings().then(res => {
-        // 🟢 连通后端：确保后端返回的数据结构能正确覆盖初始状态
-        if (res?.data) setCfg(prev => ({ ...prev, ...res.data }));
-      }).catch(err => console.error("Backend Connection Error:", err));
+        // 🟢 关键：因为 client.js 拦截了 response.data，所以这里的 res 就是 JSON 对象本身
+        if (res && typeof res === 'object') {
+          setMeta(res);
+          
+          const flatCfg = {};
+          // 将 appearance, llm_settings 等所有分组下的 item 提取出来
+          Object.values(res).forEach(groupItems => {
+            if (Array.isArray(groupItems)) {
+              groupItems.forEach(item => {
+                flatCfg[item.key] = item.value ?? item.default ?? '';
+              });
+            }
+          });
+          setCfg(flatCfg);
+        }
+      }).catch(err => {
+        console.error("加载配置失败:", err);
+      }).finally(() => setLoading(false));
     }
   }, [open]);
 
-  const updatePath = (path, val) => {
-    setCfg(prev => {
-      const newCfg = JSON.parse(JSON.stringify(prev));
-      const keys = path.split('.');
-      let curr = newCfg;
-      for (let i = 0; i < keys.length - 1; i++) {
-        curr = curr[keys[i]];
-      }
-      curr[keys[keys.length - 1]] = val;
-      return newCfg;
-    });
-  };
-
+  // 2. 统一保存逻辑：转换为后端要求的 updates: [{key, value}, ...]
   const handleSave = async () => {
     setLoading(true);
     try {
-      // 🟢 提交到后端：发送完整的 JSON 配置
-      await API.updateSettings(cfg);
-      if (setLang) setLang(cfg.app.language);
-      if (setTheme) setTheme(cfg.app.theme_mode); 
+      const payload = {
+        updates: Object.entries(cfg).map(([key, value]) => ({
+          key,
+          value: String(value) // 后端要求 value 是字符串
+        }))
+      };
+      
+      await API.updateSettings(payload);
+
+      // 联动 UI (根据 key 直接从 cfg 获取)
+      if (cfg['app.language']) setLang(cfg['app.language']);
+      if (cfg['app.theme_mode']) setTheme(cfg['app.theme_mode']);
+      
       close();
     } catch (e) {
-      alert(t('save_fail') || 'Save Failed');
+      console.error("保存失败:", e);
+      alert('保存失败，请检查后端 API');
     } finally {
       setLoading(false);
     }
   };
 
+  // 3. 动态渲染控件函数
+  const renderInput = (item) => {
+    const value = cfg[item.key] || '';
+    const baseClass = "genshin-input w-full px-4 py-2.5 text-sm transition-all focus:ring-2 focus:ring-[#D3BC8E]/20";
+
+    switch (item.type) {
+      case 'select':
+        return (
+          <select 
+            value={value} 
+            onChange={(e) => setCfg({...cfg, [item.key]: e.target.value})}
+            className={baseClass}
+          >
+            {item.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+          </select>
+        );
+      case 'boolean':
+        const isTrue = value === 'true' || value === true;
+        return (
+          <div 
+            onClick={() => setCfg({...cfg, [item.key]: isTrue ? 'false' : 'true'})}
+            className={`w-14 h-7 rounded-full relative cursor-pointer transition-all border-2 ${
+              isTrue ? 'bg-[#D3BC8E] border-[#D3BC8E] shadow-[0_0_8px_rgba(211,188,142,0.4)]' : 'bg-gray-400/20 border-gray-400/30'
+            }`}
+          >
+            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all shadow-sm ${isTrue ? 'left-8' : 'left-1'}`} />
+          </div>
+        );
+      case 'password':
+        const isVisible = showPassword[item.key];
+        return (
+          <div className="relative">
+            <input 
+              type={isVisible ? 'text' : 'password'}
+              value={value}
+              onChange={(e) => setCfg({...cfg, [item.key]: e.target.value})}
+              className={baseClass}
+              placeholder="••••••••"
+            />
+            <button 
+              onClick={() => setShowPassword({...showPassword, [item.key]: !isVisible})}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#D3BC8E] hover:text-[#3B4255]"
+            >
+              {isVisible ? <EyeOff size={16}/> : <Eye size={16}/>}
+            </button>
+          </div>
+        );
+      case 'number':
+        return (
+          <input 
+            type="number" 
+            step="0.1"
+            value={value}
+            onChange={(e) => setCfg({...cfg, [item.key]: e.target.value})}
+            className={baseClass}
+          />
+        );
+      default:
+        return (
+          <input 
+            type="text" 
+            value={value}
+            onChange={(e) => setCfg({...cfg, [item.key]: e.target.value})}
+            className={baseClass}
+          />
+        );
+    }
+  };
+
   if (!open) return null;
 
-  const FieldLabel = ({ children }) => (
-    <label className="text-xs font-bold text-[#8C7D6B] mb-2 block tracking-widest uppercase">
-      {children}
-    </label>
-  );
+  const tabs = [
+    { id: 'appearance', label: '外观交互', icon: <Monitor size={18}/> },
+    { id: 'llm_settings', label: 'LLM设置', icon: <Brain size={18}/> },
+    { id: 'tts_settings', label: '语音合成', icon: <Mic2 size={18}/> },
+    { id: 'synthesis_config', label: '合成策略', icon: <Settings2 size={18}/> },
+  ];
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-4xl bg-[#ECE5D8] dark:bg-[#1b1d22] rounded-[32px] flex border-[3px] border-[#D3BC8E]/30 overflow-hidden shadow-2xl h-[650px] relative text-[#495366] transition-colors duration-300">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+      <div className="genshin-card w-full max-w-5xl h-[700px] flex overflow-hidden border-[3px] border-[#D3BC8E] bg-[#ECE5D8] dark:bg-[#1B1D22]">
         
-        <button onClick={close} className="absolute top-5 right-5 z-20 w-8 h-8 rounded-full bg-[#3B4255] text-[#ECE5D8] flex items-center justify-center hover:scale-110 transition-transform">
-          <X size={18} />
-        </button>
-
         {/* 左侧导航栏 */}
-        <div className="w-64 bg-[#3B4255] dark:bg-[#12141a] p-6 flex flex-col border-r-2 border-[#D3BC8E]/30 shrink-0">
-           <div className="mb-10 mt-4 text-center">
-             <div className="text-[#D3BC8E] font-genshin font-bold text-2xl tracking-widest">{t('settings_title')}</div>
-             <div className="text-[#787F8E] text-[10px] tracking-[0.3em] uppercase mt-1">System Core</div>
-           </div>
-
-           <div className="space-y-2 flex-1">
-             {[
-               { id: 'app', icon: Monitor, label: t('tab_app') },
-               { id: 'llm', icon: Cpu, label: t('tab_llm') },
-               { id: 'tts', icon: Mic, label: t('tab_tts') },
-               { id: 'syn', icon: Sliders, label: t('tab_syn') },
-             ].map(tab => (
-               <button 
-                 key={tab.id}
-                 onClick={() => setActiveTab(tab.id)} 
-                 className={`w-full px-4 py-3 rounded-full font-bold text-sm flex items-center gap-3 transition-all ${activeTab === tab.id ? 'bg-[#ECE5D8] text-[#3B4255] border-l-4 border-[#D3BC8E]' : 'text-[#8C7D6B] hover:text-[#ECE5D8] hover:bg-white/10'}`}
-               >
-                 <tab.icon size={18} /> {tab.label}
-               </button>
-             ))}
-           </div>
-
-           <button onClick={handleSave} disabled={loading} className="genshin-btn-primary w-full py-3 shadow-lg">
-             {loading ? <RefreshCw className="animate-spin mr-2" size={18}/> : <Save className="mr-2" size={18}/>}
-             {loading ? t('btn_saving') : t('btn_save')}
-           </button>
+        <div className="w-56 bg-[#3B4255] p-6 flex flex-col gap-2 border-r-2 border-[#D3BC8E]/30">
+          <div className="flex items-center gap-2 mb-8 px-2 text-[#D3BC8E]">
+             <Settings2 size={24}/>
+             <span className="font-genshin text-[#ECE5D8] text-xl">系统配置</span>
+          </div>
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-3 px-4 py-4 rounded-2xl font-bold text-sm transition-all ${
+                activeTab === tab.id 
+                ? 'bg-[#D3BC8E] text-[#3B4255] shadow-lg translate-x-1' 
+                : 'text-[#ECE5D8]/60 hover:text-[#ECE5D8] hover:bg-white/5'
+              }`}
+            >
+              {tab.icon} {tab.label}
+            </button>
+          ))}
+          <div className="mt-auto p-4 bg-black/20 rounded-2xl text-[10px] text-[#D3BC8E]/50 border border-[#D3BC8E]/10">
+            <ShieldCheck size={14} className="mb-1"/>
+            设置由 Paimon 后端托管，修改将全局同步。
+          </div>
         </div>
 
-        {/* 右侧内容区 */}
-        <div className="flex-1 bg-[#F0F2F5] dark:bg-[#2c313f] flex flex-col overflow-hidden transition-colors">
-          <div className="p-8 pb-4 border-b border-[#D3BC8E]/20">
-             <h2 className="text-2xl font-genshin font-bold text-[#3B4255] dark:text-[#ece5d8] flex items-center gap-2 uppercase tracking-tighter">
-               <span className="text-[#D3BC8E]">♦</span> {t(`tab_${activeTab}`)}
-             </h2>
+        {/* 右侧内容 */}
+        <div className="flex-1 flex flex-col min-w-0">
+          <div className="px-10 py-6 flex justify-between items-center bg-white/5 border-b border-[#D3BC8E]/20">
+            <h3 className="text-2xl font-genshin font-bold text-[#3B4255] dark:text-[#ECE5D8] tracking-widest uppercase">
+              {tabs.find(t => t.id === activeTab)?.label}
+            </h3>
+            <button onClick={close} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-red-500/10 text-gray-400 hover:text-red-500 transition-all"><X size={32}/></button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-8">
-            {activeTab === 'app' && (
-              <div className="animate-fade-in space-y-8">
-                <div>
-                  <FieldLabel>{t('lbl_lang')}</FieldLabel>
-                  <div className="flex gap-4">
-                    {['zh-CN', 'en-US'].map(l => (
-                      <button 
-                        key={l}
-                        onClick={() => updatePath('app.language', l)}
-                        className={`px-6 py-2 rounded-full border-2 font-bold text-sm transition-all ${cfg.app.language === l ? 'bg-[#3B4255] text-[#ECE5D8] border-[#D3BC8E]' : 'bg-white dark:bg-gray-800 border-[#D8CBA8] text-[#8C7D6B]'}`}
-                      >
-                        {l === 'zh-CN' ? '简体中文' : 'English'}
-                      </button>
-                    ))}
+          <div className="flex-1 p-10 overflow-y-auto custom-scrollbar space-y-8 bg-gradient-to-b from-transparent to-black/5">
+            {!meta ? (
+              <div className="h-full flex flex-col items-center justify-center opacity-40 italic text-gray-500">
+                <Loader2 className="animate-spin mb-2" size={32}/>
+                同步 Paimon 终端数据...
+              </div>
+            ) : (
+              (meta[activeTab] || []).map(item => (
+                <div key={item.key} className="flex items-start justify-between gap-12 group">
+                  <div className="flex-1">
+                    <label className="text-sm font-bold text-[#495366] dark:text-[#ECE5D8] group-hover:text-[#D3BC8E] transition-colors">{item.label}</label>
+                    <div className="text-[10px] text-gray-400 font-mono mt-1 opacity-50 select-all">{item.key}</div>
+                  </div>
+                  <div className="w-80 flex-shrink-0">
+                    {renderInput(item)}
                   </div>
                 </div>
-                <div>
-                  <FieldLabel>{t('lbl_theme')}</FieldLabel>
-                  <select 
-                    className="genshin-input w-full p-3 font-bold"
-                    value={cfg.app.theme_mode}
-                    onChange={e => updatePath('app.theme_mode', e.target.value)}
-                  >
-                    <option value="system">Follow System</option>
-                    <option value="light">Light Mode</option>
-                    <option value="dark">Dark Mode</option>
-                  </select>
-                </div>
-              </div>
+              ))
             )}
+          </div>
 
-            {activeTab === 'llm' && (
-              <div className="animate-fade-in space-y-6">
-                <div>
-                  <FieldLabel>{t('lbl_provider')}</FieldLabel>
-                  <select 
-                    className="genshin-input w-full p-3 font-bold"
-                    value={cfg.llm.active_provider}
-                    onChange={e => updatePath('llm.active_provider', e.target.value)}
-                  >
-                    <option value="deepseek">DeepSeek</option>
-                    <option value="qwen">Qwen</option>
-                    <option value="local">Local (Ollama)</option>
-                  </select>
-                </div>
-                {/* 动态渲染 API Key 输入框 */}
-                {cfg.llm.active_provider !== 'local' && (
-                   <div className="space-y-4">
-                     <FieldLabel>{cfg.llm.active_provider.toUpperCase()} API Key</FieldLabel>
-                     <input type="password" 
-                       className="genshin-input w-full p-3" 
-                       placeholder="sk-..." 
-                       value={cfg.llm[cfg.llm.active_provider]?.api_key} 
-                       onChange={e => updatePath(`llm.${cfg.llm.active_provider}.api_key`, e.target.value)} 
-                     />
-                   </div>
-                )}
-              </div>
-            )}
-
-            {activeTab === 'tts' && (
-               <div className="animate-fade-in space-y-6">
-                 <FieldLabel>TTS Engine Backend</FieldLabel>
-                 <select className="genshin-input w-full p-3 font-bold" value={cfg.tts.active_backend} onChange={e => updatePath('tts.active_backend', e.target.value)}>
-                   <option value="local_docker">Local Docker</option>
-                   <option value="remote">AutoDL (Remote)</option>
-                   <option value="aliyun">Aliyun (Cloud)</option>
-                 </select>
-                 <div className="p-4 bg-black/5 dark:bg-black/20 rounded-2xl border border-dashed border-[#D3BC8E]">
-                    <p className="text-[10px] text-[#8C7D6B] font-bold">ADDRESS CONFIG</p>
-                    <input type="text" className="w-full bg-transparent border-b border-[#D8CBA8] py-2 outline-none text-sm" 
-                      placeholder="http://..."
-                      value={cfg.tts[cfg.tts.active_backend === 'local_docker' ? 'local' : 'remote'].url}
-                      onChange={e => updatePath(cfg.tts.active_backend === 'local_docker' ? 'tts.local.url' : 'tts.remote.url', e.target.value)} 
-                    />
-                 </div>
-               </div>
-            )}
+          <div className="px-10 py-6 bg-[#3B4255]/5 border-t-2 border-[#D3BC8E]/10 flex justify-end">
+             <button 
+              onClick={handleSave}
+              disabled={loading}
+              className="genshin-btn-primary px-16 py-3 shadow-2xl flex items-center gap-3 active:scale-95 disabled:opacity-50"
+             >
+               {loading ? <Loader2 className="animate-spin" size={20}/> : <Save size={20}/>}
+               <span className="font-genshin tracking-widest font-bold">确认保存</span>
+             </button>
           </div>
         </div>
       </div>
