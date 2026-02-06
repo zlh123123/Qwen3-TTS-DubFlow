@@ -203,6 +203,7 @@ TTS 设置：选择后端 (Local/Cloud)、显卡指定。（这个v1版不需要
 | :--- | :--- | :--- |
 | id | String (UUID) | 主键 |
 | name | String | 项目名称 (通常是小说名，用户可以自定义) |
+| language | String | 语言，TTS仅支持Chinese, English, Japanese, Korean, German, French, Russian, Portuguese, Spanish, Italian |
 | raw_content | Text | 小说原始文本 |
 | created_at | DateTime | 创建时间 |
 | state | String | 当前状态，可能的所有状态如下 |
@@ -715,3 +716,5 @@ Task 变 success。
 State Machine: Project.state 变 characters_ready。
 前端 (轮询):
 下一次轮询发现 state 变了，自动跳转到 Page 2。
+
+
