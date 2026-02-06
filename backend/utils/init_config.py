@@ -11,7 +11,7 @@ DEFAULT_CONFIGS = [
     },
     {
         "key": "app.language", "group": "appearance", "label": "语言",
-        "type": "select", "options": ["zh-CN", "en-US"], "default": "zh-CN", "value": "zh-CN"
+        "type": "select", "options": ["zh-CN", "en-US", "ja-JP"], "default": "zh-CN", "value": "zh-CN"
     },
 
     # B. LLM Settings (LLM设置)
@@ -29,7 +29,7 @@ DEFAULT_CONFIGS = [
     },
     {
         "key": "llm.selfdef.url", "group": "llm_settings", "label": "自定义 LLM 地址",
-        "type": "text", "options": None, "default": "http://localhost:11434", "value": "http://localhost:11434"
+        "type": "text", "options": None, "default": "", "value": ""
     },
     {
         "key": "llm.selfdef.api_key", "group": "llm_settings", "label": "自定义 LLM API Key",
@@ -39,7 +39,7 @@ DEFAULT_CONFIGS = [
     # C. TTS Settings (语音合成设置)
     {
         "key": "tts.backend", "group": "tts_settings", "label": "TTS 后端类型",
-        "type": "select", "options": ["local_pytorch", "local_vllm", "autodl", "aliyun"], "default": "local_pytorch", "value": "local_pytorch"
+        "type": "select", "options": ["local_pytorch", "local_vllm", "autodl", "aliyun"], "default": "aliyun", "value": "aliyun"
     },
     # C1. 本地pytorch部署
     {
