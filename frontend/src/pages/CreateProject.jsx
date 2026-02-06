@@ -10,7 +10,7 @@ import CreateProjectModal from '../components/CreateProjectModal';
 import { useLang } from '../contexts/LanguageContext';
 
 export default function CreateProject() {
-  const { t } = useLang();
+  const { t, lang } = useLang(); // 🟢 引入 lang 用于日期国际化
   const nav = useNavigate();
   
   const [list, setList] = useState([]);
@@ -21,18 +21,13 @@ export default function CreateProject() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('newest');
 
-  // 🟢 修改点：获取列表逻辑，适配 client.js 剥离后的数据结构
   const fetchProjects = async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     try {
       const res = await API.getProjects();
-      
-      // 因为 client.js 返回的是 response.data，所以这里直接读 items
-      // 增加容错：如果后端直接返回数组，则取 res 本身
       const items = res?.items || (Array.isArray(res) ? res : []);
       
       setList(prev => {
-        // 如果是静默轮询且后端返回为空（可能网络抖动），保留本地现有项防止闪现消失
         if (isSilent && items.length === 0 && prev.length > 0) return prev;
         return items;
       });
@@ -47,7 +42,6 @@ export default function CreateProject() {
     fetchProjects();
   }, []);
 
-  // 🟢 自动轮询逻辑：保持不变
   useEffect(() => {
     const needPolling = list.some(p => ['created', 'analyzing'].includes(p.state));
     if (needPolling) {
@@ -56,7 +50,6 @@ export default function CreateProject() {
     }
   }, [list]);
 
-  // 🟢 搜索与排序：保持不变
   const filteredList = useMemo(() => {
     let result = [...list];
     if (searchTerm.trim()) {
@@ -81,12 +74,10 @@ export default function CreateProject() {
     e.stopPropagation();
     if (!window.confirm(t('del_confirm'))) return;
     
-    // 先本地乐观更新，提升响应速度
     setList(prev => prev.filter(item => item.id !== pid));
     try { 
       await API.deleteProject(pid); 
     } catch (err) { 
-      // 失败时重新拉取
       fetchProjects(true); 
     }
   };
@@ -118,7 +109,6 @@ export default function CreateProject() {
 
   return (
     <div className="min-h-screen pb-20 bg-[#F0F2F5] dark:bg-[#1B1D22] transition-colors duration-300">
-      {/* 弹窗组件 */}
       <SettingsModal open={showSet} close={() => setShowSet(false)} />
       
       <CreateProjectModal 
@@ -127,7 +117,6 @@ export default function CreateProject() {
         onCreated={(newP) => setList(prev => [newP, ...prev])} 
       />
 
-      {/* 顶部导航 */}
       <header className="relative mt-6 mx-auto max-w-7xl px-6 z-20">
         <div className="paimon-menu px-6 py-3 flex justify-between items-center border-2 border-[#D8CBA8] bg-white/90 dark:bg-[#12141A]/90 rounded-2xl shadow-sm">
           <div className="flex items-center gap-3">
@@ -148,7 +137,6 @@ export default function CreateProject() {
         </div>
       </header>
 
-      {/* 主体内容 */}
       <main className="max-w-7xl mx-auto px-8 py-10">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
           <div className="flex items-center gap-4">
@@ -163,7 +151,7 @@ export default function CreateProject() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#D3BC8E]" size={18} />
               <input 
                 type="text" 
-                placeholder="搜索项目..." 
+                placeholder={t('search_ph')} // 🟢 替换硬编码
                 value={searchTerm} 
                 onChange={(e) => setSearchTerm(e.target.value)} 
                 className="pl-11 pr-4 py-2.5 w-64 bg-white/80 dark:bg-[#2C313F] border-2 border-[#D8CBA8] rounded-full outline-none focus:border-[#D3BC8E] transition-all text-sm font-bold shadow-sm" 
@@ -175,18 +163,16 @@ export default function CreateProject() {
                 onChange={(e) => setSortBy(e.target.value)} 
                 className="appearance-none pl-5 pr-12 py-2.5 bg-[#3B4255] border-2 border-[#D3BC8E] text-[#ECE5D8] rounded-full text-xs font-bold outline-none cursor-pointer"
               >
-                <option value="newest">最新创建</option>
-                <option value="oldest">最早创建</option>
-                <option value="name">名称排序</option>
+                <option value="newest">{t('sort_new')}</option> // 🟢 替换硬编码
+                <option value="oldest">{t('sort_old')}</option> // 🟢 替换硬编码
+                <option value="name">{t('sort_name')}</option>   // 🟢 替换硬编码
               </select>
               <ArrowUpDown className="absolute right-4 text-[#D3BC8E] pointer-events-none" size={14} />
             </div>
           </div>
         </div>
 
-        {/* 项目网格 */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-          {/* 新建项目卡片 */}
           <div 
             onClick={() => setShowNew(true)} 
             className="group h-[280px] border-4 border-dashed border-[#D8CBA8] bg-[#F7F3EB]/50 dark:bg-white/5 hover:bg-[#F7F3EB] dark:hover:bg-white/10 rounded-[2rem] flex flex-col items-center justify-center cursor-pointer transition-all hover:-translate-y-2 relative"
@@ -198,7 +184,6 @@ export default function CreateProject() {
               <Sparkles className="absolute top-6 right-6 text-[#D3BC8E]/40" size={24}/>
           </div>
 
-          {/* 渲染列表 */}
           {filteredList.map(p => {
             const isLocked = ['created', 'analyzing'].includes(p.state);
             return (
@@ -227,12 +212,23 @@ export default function CreateProject() {
                   <StatusTag s={p.state} />
                 </div>
                 
-                <div className="mt-4 pt-4 border-t-2 border-[#D8CBA8]/20 flex justify-between items-center text-xs text-[#8C7D6B] font-bold">
-                   <div className="flex items-center gap-1.5">
-                     <Clock size={14} className="text-[#D3BC8E]"/>
-                     <span>{p.created_at ? new Date(p.created_at).toLocaleDateString() : '---'}</span>
-                   </div>
-                   {!isLocked && <ChevronRight size={14} className="text-[#D3BC8E] transition-transform group-hover:translate-x-1"/>}
+                <div className="flex items-center justify-between mt-4 pt-4 border-t-2 border-[#D8CBA8]/20 text-[#8C7D6B] font-bold">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Clock size={14} className="text-[#D3BC8E] shrink-0"/>
+                    <span className="truncate text-[10px]">
+                      {p.created_at ? (
+                        new Date(p.created_at).toLocaleString(lang === 'zh-CN' ? 'zh-CN' : 'en-GB', {
+                          year: 'numeric',
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: false
+                        }).replace(/\//g, '-') 
+                      ) : '---'}
+                    </span>
+                  </div>
+                  {!isLocked && <ChevronRight size={14} className="text-[#D3BC8E] transition-transform group-hover:translate-x-1"/>}
                 </div>
               </div>
             );

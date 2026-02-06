@@ -1,29 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { X, Monitor, Brain, Mic2, Settings2, Save, Loader2, ShieldCheck, Lock, Eye, EyeOff } from 'lucide-react';
+import { X, Monitor, Brain, Mic2, Settings2, Save, Loader2, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 import * as API from '../api/endpoints';
 import { useLang } from '../contexts/LanguageContext';
 
 export default function SettingsModal({ open, close }) {
-  const { setLang, setTheme } = useLang();
+  const { setLang, setTheme, t } = useLang(); // 🟢 引入 t 函数
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('appearance');
   
-  // meta 存储原始的分组数据，cfg 存储扁平化的键值对 {"key": "value"}
   const [meta, setMeta] = useState(null);
   const [cfg, setCfg] = useState({});
   const [showPassword, setShowPassword] = useState({});
 
-  // 1. 初始化加载：适配方案 A (res 直接就是数据)
   useEffect(() => {
     if (open) {
       setLoading(true);
       API.getSettings().then(res => {
-        // 🟢 关键：因为 client.js 拦截了 response.data，所以这里的 res 就是 JSON 对象本身
         if (res && typeof res === 'object') {
           setMeta(res);
-          
           const flatCfg = {};
-          // 将 appearance, llm_settings 等所有分组下的 item 提取出来
           Object.values(res).forEach(groupItems => {
             if (Array.isArray(groupItems)) {
               groupItems.forEach(item => {
@@ -34,38 +29,35 @@ export default function SettingsModal({ open, close }) {
           setCfg(flatCfg);
         }
       }).catch(err => {
-        console.error("加载配置失败:", err);
+        console.error("Load settings failed:", err);
       }).finally(() => setLoading(false));
     }
   }, [open]);
 
-  // 2. 统一保存逻辑：转换为后端要求的 updates: [{key, value}, ...]
   const handleSave = async () => {
     setLoading(true);
     try {
       const payload = {
         updates: Object.entries(cfg).map(([key, value]) => ({
           key,
-          value: String(value) // 后端要求 value 是字符串
+          value: String(value)
         }))
       };
       
       await API.updateSettings(payload);
 
-      // 联动 UI (根据 key 直接从 cfg 获取)
       if (cfg['app.language']) setLang(cfg['app.language']);
       if (cfg['app.theme_mode']) setTheme(cfg['app.theme_mode']);
       
       close();
     } catch (e) {
-      console.error("保存失败:", e);
-      alert('保存失败，请检查后端 API');
+      console.error("Save settings failed:", e);
+      alert(t('save_fail')); // 🟢 翻译：保存失败
     } finally {
       setLoading(false);
     }
   };
 
-  // 3. 动态渲染控件函数
   const renderInput = (item) => {
     const value = cfg[item.key] || '';
     const baseClass = "genshin-input w-full px-4 py-2.5 text-sm transition-all focus:ring-2 focus:ring-[#D3BC8E]/20";
@@ -78,6 +70,7 @@ export default function SettingsModal({ open, close }) {
             onChange={(e) => setCfg({...cfg, [item.key]: e.target.value})}
             className={baseClass}
           >
+            {/* 如果选项是语言，可以使用映射显示，这里保持原始值 */}
             {item.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
           </select>
         );
@@ -136,11 +129,12 @@ export default function SettingsModal({ open, close }) {
 
   if (!open) return null;
 
+  // 🟢 使用词典中的 Tab Key
   const tabs = [
-    { id: 'appearance', label: '外观交互', icon: <Monitor size={18}/> },
-    { id: 'llm_settings', label: 'LLM设置', icon: <Brain size={18}/> },
-    { id: 'tts_settings', label: '语音合成', icon: <Mic2 size={18}/> },
-    { id: 'synthesis_config', label: '合成策略', icon: <Settings2 size={18}/> },
+    { id: 'appearance', label: 'tab_app', icon: <Monitor size={18}/> },
+    { id: 'llm_settings', label: 'tab_llm', icon: <Brain size={18}/> },
+    { id: 'tts_settings', label: 'tab_tts', icon: <Mic2 size={18}/> },
+    { id: 'synthesis_config', label: 'tab_syn', icon: <Settings2 size={18}/> },
   ];
 
   return (
@@ -151,7 +145,7 @@ export default function SettingsModal({ open, close }) {
         <div className="w-56 bg-[#3B4255] p-6 flex flex-col gap-2 border-r-2 border-[#D3BC8E]/30">
           <div className="flex items-center gap-2 mb-8 px-2 text-[#D3BC8E]">
              <Settings2 size={24}/>
-             <span className="font-genshin text-[#ECE5D8] text-xl">系统配置</span>
+             <span className="font-genshin text-[#ECE5D8] text-xl">{t('settings_title')}</span>
           </div>
           {tabs.map(tab => (
             <button
@@ -163,21 +157,24 @@ export default function SettingsModal({ open, close }) {
                 : 'text-[#ECE5D8]/60 hover:text-[#ECE5D8] hover:bg-white/5'
               }`}
             >
-              {tab.icon} {tab.label}
+              {tab.icon} {t(tab.label)} 
             </button>
           ))}
-          <div className="mt-auto p-4 bg-black/20 rounded-2xl text-[10px] text-[#D3BC8E]/50 border border-[#D3BC8E]/10">
-            <ShieldCheck size={14} className="mb-1"/>
-            设置由 Paimon 后端托管，修改将全局同步。
+          <div className="mt-auto p-4 bg-black/20 rounded-2xl text-[10px] text-[#D3BC8E]/50 border border-[#D3BC8E]/10 italic">
+            <ShieldCheck size={14} className="mb-1 inline mr-1"/>
+            Paimon Cloud Sync Active.
           </div>
         </div>
 
         {/* 右侧内容 */}
         <div className="flex-1 flex flex-col min-w-0">
           <div className="px-10 py-6 flex justify-between items-center bg-white/5 border-b border-[#D3BC8E]/20">
-            <h3 className="text-2xl font-genshin font-bold text-[#3B4255] dark:text-[#ECE5D8] tracking-widest uppercase">
-              {tabs.find(t => t.id === activeTab)?.label}
-            </h3>
+            <div>
+              <h3 className="text-2xl font-genshin font-bold text-[#3B4255] dark:text-[#ECE5D8] tracking-widest uppercase">
+                {t(tabs.find(t => t.id === activeTab)?.label)}
+              </h3>
+              <div className="text-[10px] text-[#D3BC8E]/60 font-bold tracking-tighter -mt-1">{t('settings_sub')}</div>
+            </div>
             <button onClick={close} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-red-500/10 text-gray-400 hover:text-red-500 transition-all"><X size={32}/></button>
           </div>
 
@@ -185,14 +182,17 @@ export default function SettingsModal({ open, close }) {
             {!meta ? (
               <div className="h-full flex flex-col items-center justify-center opacity-40 italic text-gray-500">
                 <Loader2 className="animate-spin mb-2" size={32}/>
-                同步 Paimon 终端数据...
+                {t('loading')}
               </div>
             ) : (
               (meta[activeTab] || []).map(item => (
                 <div key={item.key} className="flex items-start justify-between gap-12 group">
                   <div className="flex-1">
-                    <label className="text-sm font-bold text-[#495366] dark:text-[#ECE5D8] group-hover:text-[#D3BC8E] transition-colors">{item.label}</label>
-                    <div className="text-[10px] text-gray-400 font-mono mt-1 opacity-50 select-all">{item.key}</div>
+                    {/* 🟢 核心修改：使用 t(item.label) 进行动态翻译 */}
+                    <label className="text-sm font-bold text-[#495366] dark:text-[#ECE5D8] group-hover:text-[#D3BC8E] transition-colors">
+                      {t(item.key) !== item.key ? t(item.key) : item.label}
+                    </label>
+                    <div className="text-[10px] text-gray-400 font-mono mt-1 opacity-50 select-all tracking-tighter lowercase">{item.key}</div>
                   </div>
                   <div className="w-80 flex-shrink-0">
                     {renderInput(item)}
@@ -209,7 +209,7 @@ export default function SettingsModal({ open, close }) {
               className="genshin-btn-primary px-16 py-3 shadow-2xl flex items-center gap-3 active:scale-95 disabled:opacity-50"
              >
                {loading ? <Loader2 className="animate-spin" size={20}/> : <Save size={20}/>}
-               <span className="font-genshin tracking-widest font-bold">确认保存</span>
+               <span className="font-genshin tracking-widest font-bold">{t('btn_save')}</span>
              </button>
           </div>
         </div>
