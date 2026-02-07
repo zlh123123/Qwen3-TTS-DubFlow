@@ -117,7 +117,7 @@ def analyze_characters_handler(task: Task, db: Session):
                 description=char_data.get("personality_tags", ""),  
                 prompt=char_data["voice_prompt"], 
                 is_confirmed=False,
-                ref_text="",  
+                ref_text=char_data.get("ref_text", ""),  
             )
             db.add(char)
         db.commit()

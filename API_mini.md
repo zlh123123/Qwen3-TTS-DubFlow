@@ -260,7 +260,7 @@ Task (任务表)
 | :--- | :--- | :--- |
 | id | String (UUID) | 任务 ID (对应 API 返回的 task_id) |
 | project_id | String (FK to projects.id) | 外键关联 Project，用于判断project所处的状态 |
-| type | String | 任务类型: analyze_char, parse_script, synthesis |
+| type | String | 任务类型: analyze_char, parse_script, synthesis_voicedesign,synthesis_base |
 | status | String | pending (排队), processing (进行中), success, failed |
 | payload | JSON | 任务参数 (如: {"text": "你好", "char_id": 1}) |
 | result | JSON | 任务结果 (如: {"audio_url": "/static/..."}) |
@@ -456,7 +456,7 @@ Request:
 
 #### 音色试听/Reroll (异步)
 
-URL: POST /api/voices/preview
+URL: POST /api/characters/{character_id}/voice
 
 根据当前参数生成一个临时音频，**不保存到数据库**。
 

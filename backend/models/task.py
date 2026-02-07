@@ -8,7 +8,7 @@ class Task(Base):
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     project_id = Column(String, ForeignKey("projects.id"), nullable=False)
-    type = Column(String, nullable=False)  # analyze_char, parse_script, synthesis
+    type = Column(String, nullable=False)  # analyze_char, parse_script, synthesis_voicedesign,synthesis_base
     status = Column(String, default="pending")  # pending/processing/success/failed
     payload = Column(JSON, nullable=True)  # 改为 JSON 类型
     result = Column(JSON, nullable=True)  # 改为 JSON 类型

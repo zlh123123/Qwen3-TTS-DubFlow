@@ -4,7 +4,9 @@ from typing import List
 from database import get_db
 from models.project import Project
 from models.task import Task
+from models.character import Character
 from schemas.project import ProjectCreate, ProjectResponse
+from schemas.character import CharacterResponse
 import shutil
 import os
 import uuid
@@ -54,6 +56,9 @@ def create_project(item: ProjectCreate, db: Session = Depends(get_db)):
     
     project_dir = f"storage/projects/{new_project.id}"
     os.makedirs(project_dir, exist_ok=True)
+    
+    os.makedirs(f"{project_dir}/voices", exist_ok=True)
+    os.makedirs(f"{project_dir}/outputs", exist_ok=True)
     
     return new_project
 
@@ -112,3 +117,13 @@ def analyze_characters(project_id: str, db: Session = Depends(get_db)):
     db.commit()
     
     return {"task_id": task.id}
+
+@router.get("/{project_id}/characters", response_model=List[CharacterResponse])
+def get_characters(project_id: str, db: Session = Depends(get_db)):
+    characters = db.query(Character).filter(Character.project_id == project_id).all()
+    for char in characters:
+        if char.ref_audio_path:
+            char.ref_audio_url = f"/static/projects/{project_id}/voices/{char.ref_audio_path}"
+        else:
+            char.ref_audio_url = None
+    return characters
