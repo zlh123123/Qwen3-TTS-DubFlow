@@ -4,7 +4,7 @@ import * as API from '../api/endpoints';
 import { useLang } from '../contexts/LanguageContext';
 
 export default function SettingsModal({ open, close }) {
-  const { setLang, setTheme, t } = useLang(); // 🟢 引入 t 函数
+  const { setLang, setTheme, t } = useLang();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('appearance');
   
@@ -12,6 +12,7 @@ export default function SettingsModal({ open, close }) {
   const [cfg, setCfg] = useState({});
   const [showPassword, setShowPassword] = useState({});
 
+  // 1. 初始化加载
   useEffect(() => {
     if (open) {
       setLoading(true);
@@ -34,6 +35,26 @@ export default function SettingsModal({ open, close }) {
     }
   }, [open]);
 
+  // 2. 动态联动过滤逻辑
+  const shouldShowItem = (item) => {
+    const activeLLM = cfg['llm.active_provider'];
+    const activeTTS = cfg['tts.backend'];
+
+    // LLM 相关显示逻辑
+    if (item.key.startsWith('llm.deepseek.')) return activeLLM === 'deepseek';
+    if (item.key.startsWith('llm.qwen.')) return activeLLM === 'qwen';
+    if (item.key.startsWith('llm.selfdef.')) return activeLLM === 'selfdef';
+
+    // TTS 相关显示逻辑
+    if (item.key.startsWith('tts.local.')) return activeTTS === 'local_pytorch';
+    if (item.key.startsWith('tts.vllm.')) return activeTTS === 'local_vllm';
+    if (item.key.startsWith('tts.autodl.')) return activeTTS === 'autodl';
+    if (item.key.startsWith('tts.aliyun.')) return activeTTS === 'aliyun';
+
+    return true; // 默认显示的公共项
+  };
+
+  // 3. 统一保存
   const handleSave = async () => {
     setLoading(true);
     try {
@@ -46,18 +67,20 @@ export default function SettingsModal({ open, close }) {
       
       await API.updateSettings(payload);
 
+      // 同步前端 Context 状态
       if (cfg['app.language']) setLang(cfg['app.language']);
       if (cfg['app.theme_mode']) setTheme(cfg['app.theme_mode']);
       
       close();
     } catch (e) {
-      console.error("Save settings failed:", e);
-      alert(t('save_fail')); // 🟢 翻译：保存失败
+      console.error("Save failed:", e);
+      alert(t('save_fail'));
     } finally {
       setLoading(false);
     }
   };
 
+  // 4. 控件渲染函数
   const renderInput = (item) => {
     const value = cfg[item.key] || '';
     const baseClass = "genshin-input w-full px-4 py-2.5 text-sm transition-all focus:ring-2 focus:ring-[#D3BC8E]/20";
@@ -70,8 +93,11 @@ export default function SettingsModal({ open, close }) {
             onChange={(e) => setCfg({...cfg, [item.key]: e.target.value})}
             className={baseClass}
           >
-            {/* 如果选项是语言，可以使用映射显示，这里保持原始值 */}
-            {item.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            {item.options?.map(opt => (
+              <option key={opt} value={opt}>
+                {t(`opt.${opt}`) !== `opt.${opt}` ? t(`opt.${opt}`) : opt}
+              </option>
+            ))}
           </select>
         );
       case 'boolean':
@@ -129,7 +155,6 @@ export default function SettingsModal({ open, close }) {
 
   if (!open) return null;
 
-  // 🟢 使用词典中的 Tab Key
   const tabs = [
     { id: 'appearance', label: 'tab_app', icon: <Monitor size={18}/> },
     { id: 'llm_settings', label: 'tab_llm', icon: <Brain size={18}/> },
@@ -185,20 +210,24 @@ export default function SettingsModal({ open, close }) {
                 {t('loading')}
               </div>
             ) : (
-              (meta[activeTab] || []).map(item => (
-                <div key={item.key} className="flex items-start justify-between gap-12 group">
-                  <div className="flex-1">
-                    {/* 🟢 核心修改：使用 t(item.label) 进行动态翻译 */}
-                    <label className="text-sm font-bold text-[#495366] dark:text-[#ECE5D8] group-hover:text-[#D3BC8E] transition-colors">
-                      {t(item.key) !== item.key ? t(item.key) : item.label}
-                    </label>
-                    <div className="text-[10px] text-gray-400 font-mono mt-1 opacity-50 select-all tracking-tighter lowercase">{item.key}</div>
+              (meta[activeTab] || [])
+                .filter(item => shouldShowItem(item)) // 🟢 动态过滤逻辑
+                .map(item => (
+                  <div 
+                    key={item.key} 
+                    className="flex items-start justify-between gap-12 group animate-in fade-in slide-in-from-left-2 duration-300"
+                  >
+                    <div className="flex-1">
+                      <label className="text-sm font-bold text-[#495366] dark:text-[#ECE5D8] group-hover:text-[#D3BC8E] transition-colors">
+                        {t(item.key) !== item.key ? t(item.key) : item.label}
+                      </label>
+                      <div className="text-[10px] text-gray-400 font-mono mt-1 opacity-50 select-all tracking-tighter lowercase">{item.key}</div>
+                    </div>
+                    <div className="w-80 flex-shrink-0">
+                      {renderInput(item)}
+                    </div>
                   </div>
-                  <div className="w-80 flex-shrink-0">
-                    {renderInput(item)}
-                  </div>
-                </div>
-              ))
+                ))
             )}
           </div>
 

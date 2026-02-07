@@ -63,6 +63,7 @@ const DICT = {
     'opt.light': '明亮',
     'opt.dark': '暗黑',
     'opt.system': '跟随系统',
+    'llm.selfdef.model_name': '自定义模型名称',
     
     btn_save: '同步修改',
     btn_saving: '同步中...',
@@ -136,6 +137,7 @@ const DICT = {
     'llm.qwen.api_key': 'Qwen API Key',
     'llm.selfdef.url': 'Custom LLM URL',
     'llm.selfdef.api_key': 'Custom LLM API Key',
+    'llm.selfdef.model_name': 'Custom Model Name',
     
     'tts.backend': 'TTS Engine Type',
     'tts.local.model_base_path': 'Model Base Path',
@@ -227,6 +229,7 @@ const DICT = {
     'llm.qwen.api_key': 'Qwen APIキー',
     'llm.selfdef.url': 'カスタムLLM URL',
     'llm.selfdef.api_key': 'カスタムLLMキー',
+    'llm.selfdef.model_name': 'カスタムモデル名',
 
     'tts.backend': '音声合成エンジン',
     'tts.local.model_base_path': 'ベースモデルパス',
