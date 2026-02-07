@@ -12,13 +12,15 @@ import logging
 def load_prompt(language: str) -> str:
     """根据语言加载提示词"""
     prompt_dir = os.path.join(os.path.dirname(__file__), "prompts", "getroles")  
-    if language == "en":
+    if language == "English":
         prompt_file = os.path.join(prompt_dir, "en.prompt")
-    elif language == "ja":
+    elif language == "Japanese":
         prompt_file = os.path.join(prompt_dir, "ja.prompt")
     else:
         # 默认中文，包括其他语言
         prompt_file = os.path.join(prompt_dir, "zh.prompt")
+        
+    print(f"Loading prompt file: {prompt_file}")
     
     if os.path.exists(prompt_file):
         with open(prompt_file, 'r', encoding='utf-8') as f:
