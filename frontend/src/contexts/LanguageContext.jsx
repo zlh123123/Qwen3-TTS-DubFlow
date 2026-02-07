@@ -3,12 +3,11 @@ import * as API from '../api/endpoints';
 
 const LangCtx = createContext();
 
-// 🟢 词典：已增加 ja-JP 支持
+// 🟢 词典：已根据要求更新项目列表、新建项目、下一步及主要人物相关映射
 const DICT = {
   'zh-CN': {
     // 通用 (General)
     app_title: 'DUBFLOW',
-    rank: '冒险等阶 60',
     loading: '载入中...',
     confirm: '确认',
     cancel: '取消',
@@ -17,12 +16,12 @@ const DICT = {
     back: '返回',
     finish: '完成',
     abandon: '舍弃',
-    action_go: '出击',
+    action_go: '下一步', // 原为：出击
 
     // 首页 (Home / Project List)
-    quest_log: '项目委托',
+    quest_log: '项目列表', // 原为：项目委托
     quest_sub: 'Quest Journal',
-    new_quest: '新委托',
+    new_quest: '新建项目', // 原为：新委托
     search_ph: '搜索项目...',
     sort_new: '最新创建',
     sort_old: '最早创建',
@@ -69,8 +68,8 @@ const DICT = {
     btn_saving: '同步中...',
     save_fail: '配置保存失败',
 
-    // 工坊与演播室 (Workshop - 未来页面)
-    party_setup: '队伍配置',
+    // 工坊与演播室 (Workshop)
+    party_setup: '主要人物',
     members: '成员',
     voice_title: '语音试听',
     studio_title: '剧情回顾',
@@ -78,12 +77,30 @@ const DICT = {
     params: '参数配置',
     btn_batch: '批量生成',
     chk_skip: '跳过已完成',
+
+    // 角色字段映射 (Character Fields)
+    attr_title: '档案资料',
+    lbl_name: '名称',
+    lbl_gender: '性别',
+    lbl_age: '年龄',
+    lbl_description: '人设描述',
+    lbl_prompt: '音色提示词',
+    lbl_ref_text: '测试文本',
+    ph_gender: '男 / 女',
+    ph_age: '例：18',
+    ph_description: '描述性格、背景等...',
+    ph_prompt: '描述音色，如：成熟、温柔...',
+    ph_ref_text: '用于生成试听音频的文本...',
+    ph_select: '请选择成员进行整备',
+    btn_reroll: '重新生成',
+    btn_syncing: '生成中...',
+    del_confirm_char: '确定要删除这名成员吗？',
+    msg_generate_failed: '生成失败',
   },
 
   'en-US': {
     // General
     app_title: 'DUBFLOW',
-    rank: 'RANK 60',
     loading: 'Loading...',
     confirm: 'Confirm',
     cancel: 'Cancel',
@@ -92,12 +109,12 @@ const DICT = {
     back: 'Back',
     finish: 'Done',
     abandon: 'Abandon',
-    action_go: 'Deploy',
+    action_go: 'Next',
 
     // Home
-    quest_log: 'Quest Log',
+    quest_log: 'Project List',
     quest_sub: 'Mission Records',
-    new_quest: 'New Commission',
+    new_quest: 'New Project',
     search_ph: 'Search projects...',
     sort_new: 'Newest First',
     sort_old: 'Oldest First',
@@ -163,7 +180,7 @@ const DICT = {
     save_fail: 'Failed to save config',
 
     // Workshop
-    party_setup: 'Party Setup',
+    party_setup: 'Key Characters',
     members: 'Members',
     voice_title: 'Voice Preview',
     studio_title: 'Story Review',
@@ -171,12 +188,30 @@ const DICT = {
     params: 'Inspector',
     btn_batch: 'Batch Gen',
     chk_skip: 'Skip Ready',
+
+    // Character Fields
+    attr_title: 'Character Bio',
+    lbl_name: 'Name',
+    lbl_gender: 'Gender',
+    lbl_age: 'Age',
+    lbl_description: 'Description',
+    lbl_prompt: 'Voice Prompt',
+    lbl_ref_text: 'Ref Text',
+    ph_gender: 'M / F',
+    ph_age: 'e.g. 18',
+    ph_description: 'Personality, background...',
+    ph_prompt: 'Describe vibe, e.g. gentle...',
+    ph_ref_text: 'Text for voice preview...',
+    ph_select: 'Select a member to setup',
+    btn_reroll: 'Regenerate',
+    btn_syncing: 'Syncing...',
+    del_confirm_char: 'Delete this character?',
+    msg_generate_failed: 'Failed to generate',
   },
 
   'ja-JP': {
     // General
     app_title: 'DUBFLOW',
-    rank: '冒険ランク 60',
     loading: '読み込み中...',
     confirm: '確認',
     cancel: 'キャンセル',
@@ -185,12 +220,12 @@ const DICT = {
     back: '戻る',
     finish: '完了',
     abandon: '中止',
-    action_go: '出撃',
+    action_go: '次へ',
 
     // Home
-    quest_log: '任務記録',
+    quest_log: 'プロジェクト一覧',
     quest_sub: 'Quest Journal',
-    new_quest: '新規依頼',
+    new_quest: '新規作成',
     search_ph: 'プロジェクトを検索...',
     sort_new: '新しい順',
     sort_old: '古い順',
@@ -255,7 +290,7 @@ const DICT = {
     save_fail: '保存に失敗しました',
 
     // Workshop
-    party_setup: 'チーム編成',
+    party_setup: '主要登場人物',
     members: 'メンバー',
     voice_title: '音声プレビュー',
     studio_title: 'ストーリー回想',
@@ -263,6 +298,26 @@ const DICT = {
     params: 'インスペクター',
     btn_batch: '一括生成',
     chk_skip: '生成済みをスキップ',
+
+    // Character Fields
+    attr_title: 'プロフィール',
+    voice_title: '音声調整',
+    lbl_name: '名前',
+    lbl_gender: '性別',
+    lbl_age: '年齢',
+    lbl_description: 'キャラクター説明',
+    lbl_prompt: 'ボイスプロンプト',
+    lbl_ref_text: 'テストテキスト',
+    ph_gender: '男 / 女',
+    ph_age: '例：18',
+    ph_description: '性格、背景など...',
+    ph_prompt: '音色の説明...',
+    ph_ref_text: '音声プレビュー用のテキスト...',
+    ph_select: 'メンバーを選択してください',
+    btn_reroll: '再生成',
+    btn_syncing: '生成中...',
+    del_confirm_char: 'このキャラを削除しますか？',
+    msg_generate_failed: '生成に失敗しました',
   }
 };
 
@@ -285,15 +340,12 @@ export function LanguageProvider({ children }) {
     setThemeState(mode);
   };
 
-  // 🟢 初始化：适配 client.js 剥离 .data 后的数据结构
   useEffect(() => {
     const initApp = async () => {
       try {
         const res = await API.getSettings();
-        // res 现在直接是 { appearance: [...], llm_settings: [...] }
         const appearanceItems = res?.appearance || [];
         
-        // 从列表中寻找对应的 key
         const langConfig = appearanceItems.find(i => i.key === 'app.language');
         const themeConfig = appearanceItems.find(i => i.key === 'app.theme_mode');
 

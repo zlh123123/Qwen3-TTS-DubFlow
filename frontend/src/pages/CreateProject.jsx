@@ -125,7 +125,6 @@ export default function CreateProject() {
             </div>
             <div>
               <h1 className="font-genshin font-bold text-xl text-[#D3BC8E] tracking-widest leading-tight">{t('app_title')}</h1>
-              <div className="text-[10px] text-gray-400 font-medium uppercase tracking-tighter">{t('rank')}</div>
             </div>
           </div>
           <button 

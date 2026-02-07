@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Monitor, Brain, Mic2, Settings2, Save, Loader2, ShieldCheck, Eye, EyeOff } from 'lucide-react';
+import { 
+  X, Monitor, Brain, Mic2, Settings2, Save, 
+  Loader2, ShieldCheck, Eye, EyeOff, Github 
+} from 'lucide-react';
 import * as API from '../api/endpoints';
 import { useLang } from '../contexts/LanguageContext';
 
@@ -12,7 +15,7 @@ export default function SettingsModal({ open, close }) {
   const [cfg, setCfg] = useState({});
   const [showPassword, setShowPassword] = useState({});
 
-  // 1. 初始化加载
+  // 1. 初始化加载设置
   useEffect(() => {
     if (open) {
       setLoading(true);
@@ -40,21 +43,19 @@ export default function SettingsModal({ open, close }) {
     const activeLLM = cfg['llm.active_provider'];
     const activeTTS = cfg['tts.backend'];
 
-    // LLM 相关显示逻辑
     if (item.key.startsWith('llm.deepseek.')) return activeLLM === 'deepseek';
     if (item.key.startsWith('llm.qwen.')) return activeLLM === 'qwen';
     if (item.key.startsWith('llm.selfdef.')) return activeLLM === 'selfdef';
 
-    // TTS 相关显示逻辑
     if (item.key.startsWith('tts.local.')) return activeTTS === 'local_pytorch';
     if (item.key.startsWith('tts.vllm.')) return activeTTS === 'local_vllm';
     if (item.key.startsWith('tts.autodl.')) return activeTTS === 'autodl';
     if (item.key.startsWith('tts.aliyun.')) return activeTTS === 'aliyun';
 
-    return true; // 默认显示的公共项
+    return true; 
   };
 
-  // 3. 统一保存
+  // 3. 统一保存逻辑
   const handleSave = async () => {
     setLoading(true);
     try {
@@ -67,7 +68,6 @@ export default function SettingsModal({ open, close }) {
       
       await API.updateSettings(payload);
 
-      // 同步前端 Context 状态
       if (cfg['app.language']) setLang(cfg['app.language']);
       if (cfg['app.theme_mode']) setTheme(cfg['app.theme_mode']);
       
@@ -164,35 +164,62 @@ export default function SettingsModal({ open, close }) {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="genshin-card w-full max-w-5xl h-[700px] flex overflow-hidden border-[3px] border-[#D3BC8E] bg-[#ECE5D8] dark:bg-[#1B1D22]">
+      <div className="genshin-card w-full max-w-5xl h-[720px] flex overflow-hidden border-[3px] border-[#D3BC8E] bg-[#ECE5D8] dark:bg-[#1B1D22]">
         
         {/* 左侧导航栏 */}
-        <div className="w-56 bg-[#3B4255] p-6 flex flex-col gap-2 border-r-2 border-[#D3BC8E]/30">
+        <div className="w-56 bg-[#3B4255] p-6 flex flex-col border-r-2 border-[#D3BC8E]/30 shrink-0">
+          {/* 标题区 */}
           <div className="flex items-center gap-2 mb-8 px-2 text-[#D3BC8E]">
              <Settings2 size={24}/>
              <span className="font-genshin text-[#ECE5D8] text-xl">{t('settings_title')}</span>
           </div>
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-3 px-4 py-4 rounded-2xl font-bold text-sm transition-all ${
-                activeTab === tab.id 
-                ? 'bg-[#D3BC8E] text-[#3B4255] shadow-lg translate-x-1' 
-                : 'text-[#ECE5D8]/60 hover:text-[#ECE5D8] hover:bg-white/5'
-              }`}
+          
+          {/* 标签页导航 */}
+          <div className="flex-1 flex flex-col gap-2">
+            {tabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-3 px-4 py-4 rounded-2xl font-bold text-sm transition-all ${
+                  activeTab === tab.id 
+                  ? 'bg-[#D3BC8E] text-[#3B4255] shadow-lg translate-x-1' 
+                  : 'text-[#ECE5D8]/60 hover:text-[#ECE5D8] hover:bg-white/5'
+                }`}
+              >
+                {tab.icon} {t(tab.label)} 
+              </button>
+            ))}
+          </div>
+
+          {/* 🟢 底部链接区 */}
+          <div className="pt-4 mt-4 border-t border-[#D3BC8E]/20 flex flex-col gap-2">
+            <a 
+              href="https://github.com/zlh123123/Qwen3-TTS-DubFlow" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 px-4 py-2 text-xs font-bold text-[#ECE5D8]/40 hover:text-[#D3BC8E] transition-colors group"
             >
-              {tab.icon} {t(tab.label)} 
-            </button>
-          ))}
-          <div className="mt-auto p-4 bg-black/20 rounded-2xl text-[10px] text-[#D3BC8E]/50 border border-[#D3BC8E]/10 italic">
-            <ShieldCheck size={14} className="mb-1 inline mr-1"/>
-            Paimon Cloud Sync Active.
+              <Github size={16} className="group-hover:scale-110 transition-transform"/> 
+              <span>GitHub</span>
+            </a>
+            <a 
+              href="https://github.com/zlh123123/Qwen3-TTS-DubFlow/blob/main/LICENSE" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 px-4 py-2 text-xs font-bold text-[#ECE5D8]/40 hover:text-[#D3BC8E] transition-colors group"
+            >
+              <ShieldCheck size={16} className="group-hover:scale-110 transition-transform"/> 
+              <span>License</span>
+            </a>
+            <div className="px-4 text-[9px] text-[#ECE5D8]/20 font-mono mt-2 uppercase tracking-tighter">
+              Build v1.0.0-stable
+            </div>
           </div>
         </div>
 
         {/* 右侧内容 */}
         <div className="flex-1 flex flex-col min-w-0">
+          {/* 内容头部 */}
           <div className="px-10 py-6 flex justify-between items-center bg-white/5 border-b border-[#D3BC8E]/20">
             <div>
               <h3 className="text-2xl font-genshin font-bold text-[#3B4255] dark:text-[#ECE5D8] tracking-widest uppercase">
@@ -200,9 +227,12 @@ export default function SettingsModal({ open, close }) {
               </h3>
               <div className="text-[10px] text-[#D3BC8E]/60 font-bold tracking-tighter -mt-1">{t('settings_sub')}</div>
             </div>
-            <button onClick={close} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-red-500/10 text-gray-400 hover:text-red-500 transition-all"><X size={32}/></button>
+            <button onClick={close} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-red-500/10 text-gray-400 hover:text-red-500 transition-all">
+              <X size={32}/>
+            </button>
           </div>
 
+          {/* 表单内容区 */}
           <div className="flex-1 p-10 overflow-y-auto custom-scrollbar space-y-8 bg-gradient-to-b from-transparent to-black/5">
             {!meta ? (
               <div className="h-full flex flex-col items-center justify-center opacity-40 italic text-gray-500">
@@ -211,7 +241,7 @@ export default function SettingsModal({ open, close }) {
               </div>
             ) : (
               (meta[activeTab] || [])
-                .filter(item => shouldShowItem(item)) // 🟢 动态过滤逻辑
+                .filter(item => shouldShowItem(item))
                 .map(item => (
                   <div 
                     key={item.key} 
@@ -231,6 +261,7 @@ export default function SettingsModal({ open, close }) {
             )}
           </div>
 
+          {/* 底部保存按钮 */}
           <div className="px-10 py-6 bg-[#3B4255]/5 border-t-2 border-[#D3BC8E]/10 flex justify-end">
              <button 
               onClick={handleSave}

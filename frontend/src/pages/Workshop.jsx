@@ -20,28 +20,20 @@ export default function Workshop() {
   const [isPlaying, setIsPlaying] = useState(false);
   const { startPolling, loading: isRolling } = useTaskPoller();
 
-  // 🟢 核心修改：基于名称哈希的随机卡通头像
   const getAvatar = (char) => {
     const name = char.name || 'Unknown';
     const gender = (char.gender || '').toLowerCase();
-    
-    // 计算名字的简易哈希值
     let hash = 0;
     for (let i = 0; i < name.length; i++) {
       hash = name.charCodeAt(i) + ((hash << 5) - hash);
     }
     const index = Math.abs(hash);
+    const maleAvatars = ['👦', '👨‍🦱', '👨‍🎓', '👨‍🎨', '👨‍🚀', '🧔', '👱‍♂️', '👨‍💼'];
+    const femaleAvatars = ['👧', '👩‍🦱', '👩‍🎓', '👩‍🎨', '👩‍🚀', '👸', '👱‍♀️', '👩‍💼'];
+    const neutralAvatars = ['🧑', '🕵️', '🧙', '🧛', '🥷'];
 
-    // 准备丰富的卡通头像池
-    const maleAvatars = ['👦', '👨‍🦱', '👨‍🎓', '👨‍🎨', '👨‍🚀', '👨‍🌾', '🧔', '👱‍♂️', '👨‍🔧', '👨‍💼'];
-    const femaleAvatars = ['👧', '👩‍🦱', '👩‍🎓', '👩‍🎨', '👩‍🚀', '👩‍🌾', '👸', '👱‍♀️', '👩‍🔧', '👩‍💼'];
-    const neutralAvatars = ['🧑', '🕵️', '🧙', '🧛', '🥷', '🧑‍🎄'];
-
-    if (gender === 'male' || gender === '男') {
-      return maleAvatars[index % maleAvatars.length];
-    } else if (gender === 'female' || gender === '女') {
-      return femaleAvatars[index % femaleAvatars.length];
-    }
+    if (gender === 'male' || gender === '男') return maleAvatars[index % maleAvatars.length];
+    if (gender === 'female' || gender === '女') return femaleAvatars[index % femaleAvatars.length];
     return neutralAvatars[index % neutralAvatars.length];
   };
 
@@ -52,11 +44,11 @@ export default function Workshop() {
         const res = await API.getCharacters(pid);
         const list = (res.data || res || []).map(c => ({
           ...c,
-          gender: c.gender || 'unknown',
+          gender: c.gender || '',
           age: c.age || '',
           description: c.description || '',
           prompt: c.prompt || '',
-          ref_text: c.ref_text || 'Ready for test!',
+          ref_text: c.ref_text || '',
         }));
         setChars(list);
         if (list.length > 0) setActID(list[0].id);
@@ -91,12 +83,12 @@ export default function Workshop() {
       startPolling(res.task_id || res.data.task_id, (result) => {
         mutate(actID, { preview_audio: result.audio_url });
       });
-    } catch (err) { alert("Generation failed"); }
+    } catch (err) { alert(t('msg_generate_failed')); }
   };
 
   const delChar = (e, id) => {
     e.stopPropagation();
-    if (!confirm("Delete this character?")) return;
+    if (!confirm(t('del_confirm_char'))) return;
     API.deleteCharacter(id).then(() => {
       const rest = chars.filter(c => c.id !== id);
       setChars(rest);
@@ -130,7 +122,7 @@ export default function Workshop() {
                   {getAvatar(c)}
                 </div>
                 <div className="flex-1 min-w-0 font-bold truncate text-sm uppercase">{c.name}</div>
-                <button onClick={(e) => delChar(e, c.id)} className="opacity-0 group-hover:opacity-100 p-1 text-red-400 hover:text-red-600"><Trash2 size={14}/></button>
+                <button onClick={(e) => delChar(e, c.id)} className="opacity-0 group-hover:opacity-100 p-1 text-red-400 hover:text-red-600 transition-all"><Trash2 size={14}/></button>
               </div>
             ))}
           </div>
@@ -138,10 +130,10 @@ export default function Workshop() {
 
         <section className="flex-1 genshin-card-flat overflow-hidden flex flex-col">
           {actChar ? (
-            <div className="flex-1 overflow-y-auto p-10 custom-scrollbar space-y-10 animate-in">
+            <div className="flex-1 overflow-y-auto p-10 custom-scrollbar space-y-8 animate-in">
               <div className="space-y-4">
                 <div className="text-xs font-bold text-[#8C7D6B] dark:text-[#D3BC8E] border-b-2 border-[#D3BC8E]/30 pb-2 uppercase tracking-[0.2em] flex gap-2"><User size={16}/> {t('attr_title')}</div>
-                <div className="bg-[#EBE5D9]/50 dark:bg-black/20 p-8 rounded-[2.5rem] grid grid-cols-12 gap-8 border-2 border-white dark:border-white/5 shadow-inner">
+                <div className="bg-[#EBE5D9]/50 dark:bg-black/20 p-8 rounded-[2.5rem] border-2 border-white dark:border-white/5 shadow-inner grid grid-cols-12 gap-8">
                   <div className="col-span-2 aspect-square avatar-gradient rounded-3xl border-4 border-[#D3BC8E] flex items-center justify-center text-7xl shadow-xl">
                     {getAvatar(actChar)}
                   </div>
@@ -151,62 +143,60 @@ export default function Workshop() {
                       <input className="genshin-input-simple" value={actChar.name} onChange={e => mutate(actID, {name: e.target.value})} onBlur={e => syncToBackend(actID, 'name', e.target.value)} />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] text-[#8C7D6B] font-black uppercase tracking-widest">Gender</label>
-                      <select className="genshin-input-simple" value={actChar.gender} onChange={e => {mutate(actID, {gender: e.target.value}); syncToBackend(actID, 'gender', e.target.value)}}>
-                        <option value="male">Male</option><option value="female">Female</option><option value="unknown">Unknown</option>
-                      </select>
+                      <label className="text-[10px] text-[#8C7D6B] font-black uppercase tracking-widest">{t('lbl_gender')}</label>
+                      <input className="genshin-input-simple" placeholder={t('ph_gender')} value={actChar.gender} onChange={e => mutate(actID, {gender: e.target.value})} onBlur={e => syncToBackend(actID, 'gender', e.target.value)} />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] text-[#8C7D6B] font-black uppercase tracking-widest">Age</label>
-                      <input className="genshin-input-simple" placeholder="e.g. 18" value={actChar.age} onChange={e => mutate(actID, {age: e.target.value})} onBlur={e => syncToBackend(actID, 'age', e.target.value)} />
+                      <label className="text-[10px] text-[#8C7D6B] font-black uppercase tracking-widest">{t('lbl_age')}</label>
+                      <input className="genshin-input-simple" placeholder={t('ph_age')} value={actChar.age} onChange={e => mutate(actID, {age: e.target.value})} onBlur={e => syncToBackend(actID, 'age', e.target.value)} />
                     </div>
                     <div className="space-y-1 col-span-3">
-                      <label className="text-[10px] text-[#8C7D6B] font-black uppercase tracking-widest">Personality Description</label>
-                      <textarea className="genshin-input-simple h-20 py-3 resize-none" value={actChar.description} onChange={e => mutate(actID, {description: e.target.value})} onBlur={e => syncToBackend(actID, 'description', e.target.value)} />
+                      <label className="text-[10px] text-[#8C7D6B] font-black uppercase tracking-widest">{t('lbl_description')}</label>
+                      <textarea className="genshin-input-simple h-20 py-3 resize-none" placeholder={t('ph_description')} value={actChar.description} onChange={e => mutate(actID, {description: e.target.value})} onBlur={e => syncToBackend(actID, 'description', e.target.value)} />
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-6 pb-4">
+              <div className="space-y-4 pb-4">
                 <div className="text-xs font-bold text-[#8C7D6B] dark:text-[#D3BC8E] border-b-2 border-[#D3BC8E]/30 pb-2 uppercase tracking-[0.2em] flex gap-2"><Mic size={16}/> {t('voice_title')}</div>
-                <div className="bg-[#3B4255] dark:bg-[#12141a] p-8 rounded-[2.5rem] shadow-2xl space-y-8 border-2 border-white/5">
+                <div className="bg-[#EBE5D9]/50 dark:bg-black/20 p-8 rounded-[2.5rem] border-2 border-white dark:border-white/5 shadow-inner space-y-6">
                   <div className="grid grid-cols-2 gap-8">
                     <div className="space-y-1">
-                      <label className="text-[10px] text-white/30 font-black tracking-widest ml-1 italic">Voice Prompt (Vibe)</label>
-                      <input className="w-full bg-transparent border-b-2 border-white/10 px-0 py-2 text-xl font-bold text-[#D3BC8E] outline-none focus:border-[#D3BC8E] transition-colors" value={actChar.prompt} onChange={e => mutate(actID, {prompt: e.target.value})} onBlur={e => syncToBackend(actID, 'prompt', e.target.value)} />
+                      <label className="text-[10px] text-[#8C7D6B] font-black uppercase tracking-widest ml-1">{t('lbl_prompt')}</label>
+                      <textarea className="genshin-input-simple h-24 py-3 resize-none" placeholder={t('ph_prompt')} value={actChar.prompt} onChange={e => mutate(actID, {prompt: e.target.value})} onBlur={e => syncToBackend(actID, 'prompt', e.target.value)} />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] text-white/30 font-black tracking-widest ml-1 italic">Ref Text</label>
-                      <input className="w-full bg-transparent border-b-2 border-white/10 px-0 py-2 text-sm text-white/80 outline-none focus:border-[#D3BC8E]" value={actChar.ref_text} onChange={e => mutate(actID, {ref_text: e.target.value})} onBlur={e => syncToBackend(actID, 'ref_text', e.target.value)} />
+                      <label className="text-[10px] text-[#8C7D6B] font-black uppercase tracking-widest ml-1">{t('lbl_ref_text')}</label>
+                      <textarea className="genshin-input-simple h-24 py-3 resize-none" placeholder={t('ph_ref_text')} value={actChar.ref_text} onChange={e => mutate(actID, {ref_text: e.target.value})} onBlur={e => syncToBackend(actID, 'ref_text', e.target.value)} />
                     </div>
                   </div>
 
                   <div className="space-y-5">
                     <div 
                       onClick={handleTogglePlay}
-                      className={`h-16 rounded-2xl bg-[#F4F6FF]/5 dark:bg-black/20 border border-white/10 flex items-end px-6 pb-3 gap-[3px] cursor-pointer group transition-all hover:bg-[#F4F6FF]/10 ${actChar.preview_audio || isPlaying ? 'opacity-100' : 'opacity-20'}`}
+                      className={`h-16 rounded-2xl bg-white/40 dark:bg-black/20 border-2 border-[#D8CBA8] dark:border-white/10 flex items-end px-6 pb-3 gap-[3px] cursor-pointer group transition-all hover:bg-white/60 ${actChar.preview_audio || isPlaying ? 'opacity-100' : 'opacity-40'}`}
                     >
-                      <div className="play-btn-glow bg-[#8E97FD] p-2 rounded-full text-white self-center shrink-0">
+                      <div className="bg-[#3B4255] dark:bg-[#D3BC8E] p-2 rounded-full text-white dark:text-[#3B4255] self-center shrink-0 shadow-md transition-transform group-hover:scale-110">
                         {isPlaying ? <Pause size={18} fill="currentColor"/> : <Play size={18} fill="currentColor"/>}
                       </div>
                       <div className="flex-1 flex items-end gap-[1px] h-10 mb-1 justify-center overflow-hidden">
                         {Array.from({ length: 400 }).map((_, i) => {
                           const h = Math.abs(Math.sin(i * 0.2)) * 0.6 + Math.random() * 0.4;
                           return (
-                            <div key={i} className={`waveform-bar ${isPlaying ? 'waveform-animate' : ''}`} style={{ width: '2px', height: `${h * 100}%`, animationDelay: `${i * 0.02}s`, backgroundColor: isPlaying ? '#8E97FD' : '#5C639E' }} />
+                            <div key={i} className={`waveform-bar ${isPlaying ? 'waveform-animate' : ''}`} style={{ width: '2px', height: `${h * 100}%`, animationDelay: `${i * 0.02}s`, backgroundColor: isPlaying ? '#3B4255' : '#D3BC8E' }} />
                           );
                         })}
                       </div>
-                      <span className="text-[10px] font-bold text-[#8E97FD] self-center ml-2 italic shrink-0">00:04</span>
+                      <span className="text-[10px] font-bold text-[#3B4255] dark:text-[#D3BC8E] self-center ml-2 italic shrink-0">00:04</span>
                     </div>
 
                     <div className="flex gap-4">
                       <button onClick={reroll} disabled={isRolling} className="flex-1 py-3.5 rounded-2xl border-2 border-[#D3BC8E] text-[#D3BC8E] font-bold flex justify-center items-center gap-3 hover:bg-[#D3BC8E] hover:text-[#3B4255] transition-all disabled:opacity-50">
                         <RefreshCw size={18} className={isRolling ? 'animate-spin' : ''} /> 
-                        <span className="tracking-widest uppercase text-xs">{isRolling ? 'Resonating...' : t('btn_reroll')}</span>
+                        <span className="tracking-widest uppercase text-xs">{isRolling ? t('btn_syncing') : t('btn_reroll')}</span>
                       </button>
-                      <button className="flex-1 py-3.5 rounded-2xl bg-[#D3BC8E] text-[#3B4255] font-bold shadow-lg uppercase tracking-widest text-xs active:scale-95">
+                      <button className="flex-1 py-3.5 rounded-2xl bg-[#D3BC8E] text-[#3B4255] font-bold shadow-lg uppercase tracking-widest text-xs active:scale-95 transition-all">
                         {t('confirm')}
                       </button>
                     </div>
