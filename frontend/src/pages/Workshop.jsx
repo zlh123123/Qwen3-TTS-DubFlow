@@ -1,7 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronRight, Plus, Trash2, RefreshCw, Star, Shield, Sword } from 'lucide-react';
-import { useTaskPoller } from '../hooks/useTaskPoller'; // 假设你有一个轮询 Hook
+import { 
+  ChevronRight, Plus, Trash2, RefreshCw, 
+  Mic, User, Info, Play, Pause, Shield 
+} from 'lucide-react';
+import { useTaskPoller } from '../hooks/useTaskPoller';
 import * as API from '../api/endpoints';
 import { useLang } from '../contexts/LanguageContext';
 
@@ -9,13 +12,39 @@ export default function Workshop() {
   const { t } = useLang();
   const { pid } = useParams();
   const nav = useNavigate();
+  const audioRef = useRef(null);
   
   const [chars, setChars] = useState([]);
   const [actID, setActID] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(false);
   const { startPolling, loading: isRolling } = useTaskPoller();
 
-  // 🟢 1. 加载角色：对接后端 project_id
+  // 🟢 核心修改：基于名称哈希的随机卡通头像
+  const getAvatar = (char) => {
+    const name = char.name || 'Unknown';
+    const gender = (char.gender || '').toLowerCase();
+    
+    // 计算名字的简易哈希值
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const index = Math.abs(hash);
+
+    // 准备丰富的卡通头像池
+    const maleAvatars = ['👦', '👨‍🦱', '👨‍🎓', '👨‍🎨', '👨‍🚀', '👨‍🌾', '🧔', '👱‍♂️', '👨‍🔧', '👨‍💼'];
+    const femaleAvatars = ['👧', '👩‍🦱', '👩‍🎓', '👩‍🎨', '👩‍🚀', '👩‍🌾', '👸', '👱‍♀️', '👩‍🔧', '👩‍💼'];
+    const neutralAvatars = ['🧑', '🕵️', '🧙', '🧛', '🥷', '🧑‍🎄'];
+
+    if (gender === 'male' || gender === '男') {
+      return maleAvatars[index % maleAvatars.length];
+    } else if (gender === 'female' || gender === '女') {
+      return femaleAvatars[index % femaleAvatars.length];
+    }
+    return neutralAvatars[index % neutralAvatars.length];
+  };
+
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
@@ -23,211 +52,173 @@ export default function Workshop() {
         const res = await API.getCharacters(pid);
         const list = (res.data || res || []).map(c => ({
           ...c,
-          // 增加兜底数据，防止后端字段缺失导致 UI 崩溃
-          gender: c.gender || '?',
-          avatar: c.avatar || '👤', 
+          gender: c.gender || 'unknown',
+          age: c.age || '',
+          description: c.description || '',
           prompt: c.prompt || '',
-          ref_text: c.ref_text || 'Hello World',
-          element: c.element || '⭐'
+          ref_text: c.ref_text || 'Ready for test!',
         }));
         setChars(list);
         if (list.length > 0) setActID(list[0].id);
-      } catch (err) {
-        console.error("Failed to fetch characters:", err);
-      } finally {
-        setLoading(false);
-      }
+      } catch (err) { console.error(err); } finally { setLoading(false); }
     };
     loadData();
   }, [pid]);
 
   const actChar = chars.find(c => c.id === actID);
-
-  // 🟢 2. 本地状态修改（防抖或离开页面时保存）
   const mutate = (id, pl) => setChars(prev => prev.map(c => c.id === id ? { ...c, ...pl } : c));
 
-  // 🟢 3. 实时同步到后端：修改名字或 Prompt
   const syncToBackend = async (id, field, value) => {
-    try {
-      await API.updateCharacter(id, { [field]: value });
-    } catch (err) {
-      console.error("Sync failed:", err);
-    }
+    try { await API.updateCharacter(id, { [field]: value }); } catch (e) { console.error(e); }
   };
 
-  // 🟢 4. 语音试听：对接后端 Task 系统
+  const handleTogglePlay = () => {
+    if (audioRef.current && actChar?.preview_audio) {
+      if (isPlaying) audioRef.current.pause();
+      else audioRef.current.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
+
   const reroll = async () => {
     if (!actChar) return;
     try {
-      // 发起异步生成请求
       const res = await API.previewVoice({
         character_id: actChar.id,
         text: actChar.ref_text,
         prompt: actChar.prompt
       });
-      
-      // 开始轮询任务结果 (taskId -> audioUrl)
       startPolling(res.task_id || res.data.task_id, (result) => {
         mutate(actID, { preview_audio: result.audio_url });
       });
-    } catch (err) {
-      alert("Voice generation failed.");
-    }
+    } catch (err) { alert("Generation failed"); }
   };
 
-  const del = async (e, id) => {
+  const delChar = (e, id) => {
     e.stopPropagation();
-    if (!confirm(t('del_confirm_char'))) return;
-    try {
-      await API.deleteCharacter(id);
+    if (!confirm("Delete this character?")) return;
+    API.deleteCharacter(id).then(() => {
       const rest = chars.filter(c => c.id !== id);
       setChars(rest);
       if (actID === id) setActID(rest[0]?.id || null);
-    } catch (err) {
-      alert("Delete failed");
-    }
+    });
   };
 
-  if (loading) return <div className="h-screen flex items-center justify-center text-[#D3BC8E] font-bold bg-[#F0F2F5] animate-pulse">{t('loading')}</div>;
+  if (loading) return <div className="h-screen flex items-center justify-center text-[#D3BC8E] font-bold bg-[#F0F2F5] dark:bg-[#1B1D22]">{t('loading')}</div>;
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden text-[#495366] bg-[#F0F2F5]">
-      {/* Header */}
-      <header className="px-8 py-4 z-20 bg-gradient-to-b from-[#D8CBA8]/50 to-transparent shrink-0">
+    <div className="h-screen flex flex-col overflow-hidden text-[#495366] dark:text-[#ECE5D8]">
+      <header className="px-8 py-4 shrink-0">
         <div className="flex justify-between items-center">
-           <div className="flex items-center gap-3">
-              <button onClick={() => nav('/')} className="w-10 h-10 rounded-full border-none bg-white/50 hover:bg-white shadow-sm flex items-center justify-center transition-all active:scale-90">
-                <ChevronRight className="rotate-180 text-[#3B4255]"/>
-              </button>
-              <h1 className="font-genshin text-2xl text-[#3B4255] font-bold drop-shadow-sm flex items-center gap-2">
-                 {t('party_setup')} 
-                 <span className="text-xs font-sans text-[#8C7D6B] font-normal px-2 py-0.5 bg-white/40 rounded-full">Lv.90</span>
-              </h1>
-           </div>
-           
-           <button 
-             onClick={() => nav(`/project/${pid}/studio`)} 
-             className="genshin-btn-primary px-10 py-2.5 flex items-center gap-2 group shadow-xl"
-           >
-             <span className="font-genshin text-lg tracking-widest">{t('action_go')}</span> 
-             <ChevronRight size={20} strokeWidth={3} className="group-hover:translate-x-1 transition-transform"/>
-           </button>
+          <div className="flex items-center gap-3">
+            <button onClick={() => nav('/')} className="genshin-btn-circle"><ChevronRight className="rotate-180" /></button>
+            <h1 className="font-genshin text-2xl font-bold tracking-tight">{t('party_setup')}</h1>
+          </div>
+          <button onClick={() => nav(`/project/${pid}/studio`)} className="genshin-btn-primary px-10 py-2.5">
+            <span className="font-genshin text-lg">{t('action_go')}</span> 
+            <ChevronRight size={20} strokeWidth={3} />
+          </button>
         </div>
       </header>
 
       <main className="flex-1 px-8 pb-8 flex gap-8 overflow-hidden min-h-0 relative">
-        {/* 左侧角色列表 */}
-        <aside className="w-80 flex flex-col overflow-hidden shrink-0 bg-[#EBE5D9]/80 backdrop-blur rounded-[2rem] p-4 border-2 border-white/50 shadow-xl">
-           <div className="flex justify-between items-center px-4 mb-4">
-             <span className="text-[10px] font-bold text-[#8C7D6B] uppercase tracking-tighter">{t('members')}</span>
-             <span className="text-[10px] font-bold text-[#D3BC8E] bg-[#3B4255] px-2 py-0.5 rounded-full">{chars.length} / 20</span>
-           </div>
-           <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
-             {chars.map(c => (
-               <div 
-                key={c.id} 
-                onClick={() => setActID(c.id)} 
-                className={`group relative h-20 rounded-[1.5rem] cursor-pointer flex items-center gap-4 px-4 border-2 transition-all duration-300 ${actID === c.id ? 'bg-[#F2EBDC] border-[#D3BC8E] scale-105 shadow-lg' : 'bg-white/40 border-transparent hover:bg-white/60'}`}
-               >
-                 <div className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl border-2 shrink-0 transition-transform ${actID === c.id ? 'bg-[#3B4255] border-[#D3BC8E] rotate-6' : 'bg-[#D8CBA8] border-white'}`}>
-                   {c.avatar}
-                 </div>
-                 <div className="flex-1 min-w-0 font-bold text-[#3B4255] truncate text-lg uppercase tracking-tight">{c.name}</div>
-                 <button onClick={(e) => del(e, c.id)} className="opacity-0 group-hover:opacity-100 p-2 text-[#FF7F7F] hover:bg-red-50 rounded-full transition-all">
-                    <Trash2 size={16}/>
-                 </button>
-               </div>
-             ))}
-           </div>
+        <aside className="w-72 flex flex-col overflow-hidden shrink-0 bg-[#EBE5D9]/80 dark:bg-[#2c313f]/80 backdrop-blur rounded-[2.5rem] p-4 border-2 border-white dark:border-white/5 shadow-2xl">
+          <div className="flex-1 overflow-y-auto pr-1 space-y-3 custom-scrollbar">
+            {chars.map(c => (
+              <div key={c.id} onClick={() => { setActID(c.id); setIsPlaying(false); }} className={`group relative h-16 rounded-2xl cursor-pointer flex items-center gap-3 px-3 border-2 transition-all ${actID === c.id ? 'bg-[#F2EBDC] dark:bg-[#3b4255] border-[#D3BC8E] shadow-md' : 'bg-white/30 dark:bg-white/5 border-transparent'}`}>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-2xl shrink-0 transition-transform ${actID === c.id ? 'avatar-gradient text-white scale-110' : 'bg-[#D8CBA8] dark:bg-[#4a5366]'}`}>
+                  {getAvatar(c)}
+                </div>
+                <div className="flex-1 min-w-0 font-bold truncate text-sm uppercase">{c.name}</div>
+                <button onClick={(e) => delChar(e, c.id)} className="opacity-0 group-hover:opacity-100 p-1 text-red-400 hover:text-red-600"><Trash2 size={14}/></button>
+              </div>
+            ))}
+          </div>
         </aside>
 
-        {/* 右侧详情区 */}
-        <section className="flex-1 genshin-card-flat bg-white/40 backdrop-blur rounded-[3rem] border-2 border-white/60 shadow-2xl overflow-hidden flex flex-col">
+        <section className="flex-1 genshin-card-flat overflow-hidden flex flex-col">
           {actChar ? (
-            <div className="flex-1 overflow-y-auto p-10 custom-scrollbar animate-in fade-in slide-in-from-right-4">
-              {/* 角色顶部 Banner */}
-              <div className="flex gap-10 mb-10 items-end">
-                 <div className="w-40 h-40 bg-gradient-to-b from-[#5C5C70] to-[#3B4255] rounded-t-full rounded-b-[3rem] border-4 border-[#D3BC8E] shadow-2xl flex items-center justify-center text-8xl relative group">
-                    {actChar.avatar}
-                    <div className="absolute -bottom-4 w-12 h-12 bg-[#EBE5D9] rounded-full border-2 border-[#D3BC8E] flex items-center justify-center text-2xl shadow-lg ring-4 ring-[#F0F2F5]">{actChar.element}</div>
-                 </div>
-                 <div className="flex-1 pb-4">
-                    <h2 className="text-5xl font-genshin text-[#3B4255] mb-3 tracking-tighter uppercase italic">{actChar.name}</h2>
-                    <div className="flex gap-1.5 mb-6">{[1,2,3,4,5].map(i => <Star key={i} size={22} className="fill-[#F3A530] text-[#F3A530] drop-shadow-sm"/>)}</div>
-                    <div className="flex gap-4 opacity-90">
-                       <div className="flex items-center gap-3 bg-[#3B4255] text-[#ECE5D8] px-5 py-2 rounded-full shadow-md">
-                          <Shield size={16} className="text-[#D3BC8E]"/> <span className="text-sm font-bold tracking-widest uppercase">DEF 1240</span>
-                       </div>
-                       <div className="flex items-center gap-3 bg-[#3B4255] text-[#ECE5D8] px-5 py-2 rounded-full shadow-md">
-                          <Sword size={16} className="text-[#D3BC8E]"/> <span className="text-sm font-bold tracking-widest uppercase">ATK 2480</span>
-                       </div>
+            <div className="flex-1 overflow-y-auto p-10 custom-scrollbar space-y-10 animate-in">
+              <div className="space-y-4">
+                <div className="text-xs font-bold text-[#8C7D6B] dark:text-[#D3BC8E] border-b-2 border-[#D3BC8E]/30 pb-2 uppercase tracking-[0.2em] flex gap-2"><User size={16}/> {t('attr_title')}</div>
+                <div className="bg-[#EBE5D9]/50 dark:bg-black/20 p-8 rounded-[2.5rem] grid grid-cols-12 gap-8 border-2 border-white dark:border-white/5 shadow-inner">
+                  <div className="col-span-2 aspect-square avatar-gradient rounded-3xl border-4 border-[#D3BC8E] flex items-center justify-center text-7xl shadow-xl">
+                    {getAvatar(actChar)}
+                  </div>
+                  <div className="col-span-10 grid grid-cols-3 gap-6">
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-[#8C7D6B] font-black uppercase tracking-widest">{t('lbl_name')}</label>
+                      <input className="genshin-input-simple" value={actChar.name} onChange={e => mutate(actID, {name: e.target.value})} onBlur={e => syncToBackend(actID, 'name', e.target.value)} />
                     </div>
-                 </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-[#8C7D6B] font-black uppercase tracking-widest">Gender</label>
+                      <select className="genshin-input-simple" value={actChar.gender} onChange={e => {mutate(actID, {gender: e.target.value}); syncToBackend(actID, 'gender', e.target.value)}}>
+                        <option value="male">Male</option><option value="female">Female</option><option value="unknown">Unknown</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-[#8C7D6B] font-black uppercase tracking-widest">Age</label>
+                      <input className="genshin-input-simple" placeholder="e.g. 18" value={actChar.age} onChange={e => mutate(actID, {age: e.target.value})} onBlur={e => syncToBackend(actID, 'age', e.target.value)} />
+                    </div>
+                    <div className="space-y-1 col-span-3">
+                      <label className="text-[10px] text-[#8C7D6B] font-black uppercase tracking-widest">Personality Description</label>
+                      <textarea className="genshin-input-simple h-20 py-3 resize-none" value={actChar.description} onChange={e => mutate(actID, {description: e.target.value})} onBlur={e => syncToBackend(actID, 'description', e.target.value)} />
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {/* 编辑区域 */}
-              <div className="grid grid-cols-2 gap-10">
-                 <div className="space-y-6">
-                    <div className="text-xs font-bold text-[#8C7D6B] border-b-2 border-[#D3BC8E]/30 pb-2 uppercase tracking-[0.2em]">{t('attr_title')}</div>
-                    <div className="bg-[#EBE5D9]/50 p-6 rounded-[2rem] border-2 border-white/50 space-y-5 shadow-inner">
-                       <div className="space-y-2">
-                         <label className="text-[10px] text-[#8C7D6B] font-black uppercase tracking-widest ml-1">{t('lbl_name')}</label>
-                         <input 
-                            className="w-full bg-white/60 rounded-xl px-4 py-3 font-bold text-[#3B4255] outline-none focus:ring-2 ring-[#D3BC8E] transition-all" 
-                            value={actChar.name} 
-                            onChange={e => mutate(actID, {name: e.target.value})}
-                            onBlur={e => syncToBackend(actID, 'name', e.target.value)}
-                         />
-                       </div>
-                       <div className="space-y-2">
-                         <label className="text-[10px] text-[#8C7D6B] font-black uppercase tracking-widest ml-1">{t('lbl_prompt')}</label>
-                         <textarea 
-                            className="w-full bg-white/60 rounded-xl px-4 py-4 text-sm h-32 resize-none outline-none focus:ring-2 ring-[#D3BC8E] transition-all leading-relaxed" 
-                            value={actChar.prompt} 
-                            onChange={e => mutate(actID, {prompt: e.target.value})}
-                            onBlur={e => syncToBackend(actID, 'prompt', e.target.value)}
-                         />
-                       </div>
+              <div className="space-y-6 pb-4">
+                <div className="text-xs font-bold text-[#8C7D6B] dark:text-[#D3BC8E] border-b-2 border-[#D3BC8E]/30 pb-2 uppercase tracking-[0.2em] flex gap-2"><Mic size={16}/> {t('voice_title')}</div>
+                <div className="bg-[#3B4255] dark:bg-[#12141a] p-8 rounded-[2.5rem] shadow-2xl space-y-8 border-2 border-white/5">
+                  <div className="grid grid-cols-2 gap-8">
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-white/30 font-black tracking-widest ml-1 italic">Voice Prompt (Vibe)</label>
+                      <input className="w-full bg-transparent border-b-2 border-white/10 px-0 py-2 text-xl font-bold text-[#D3BC8E] outline-none focus:border-[#D3BC8E] transition-colors" value={actChar.prompt} onChange={e => mutate(actID, {prompt: e.target.value})} onBlur={e => syncToBackend(actID, 'prompt', e.target.value)} />
                     </div>
-                 </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-white/30 font-black tracking-widest ml-1 italic">Ref Text</label>
+                      <input className="w-full bg-transparent border-b-2 border-white/10 px-0 py-2 text-sm text-white/80 outline-none focus:border-[#D3BC8E]" value={actChar.ref_text} onChange={e => mutate(actID, {ref_text: e.target.value})} onBlur={e => syncToBackend(actID, 'ref_text', e.target.value)} />
+                    </div>
+                  </div>
 
-                 <div className="flex flex-col">
-                    <div className="text-xs font-bold text-[#8C7D6B] border-b-2 border-[#D3BC8E]/30 pb-2 uppercase tracking-[0.2em]">{t('voice_title')}</div>
-                    <div className="bg-[#3B4255] text-[#ECE5D8] p-8 rounded-[2rem] flex-1 flex flex-col relative overflow-hidden mt-6 shadow-2xl">
-                       <div className="absolute top-0 right-0 p-8 opacity-10"><Mic size={120}/></div>
-                       <textarea 
-                          className="w-full bg-transparent text-xl font-bold text-white resize-none outline-none mb-8 border-b-2 border-white/10 focus:border-[#D3BC8E] transition-colors leading-relaxed placeholder:text-white/20" 
-                          rows="3" 
-                          placeholder="Type reference text..."
-                          value={actChar.ref_text} 
-                          onChange={e => mutate(actID, { ref_text: e.target.value })}
-                       />
-                       <div className="mt-auto flex gap-4 z-10">
-                         <button 
-                            onClick={reroll} 
-                            disabled={isRolling} 
-                            className="flex-1 py-4 rounded-2xl border-2 border-[#D3BC8E] text-[#D3BC8E] font-bold flex justify-center items-center gap-3 hover:bg-[#D3BC8E] hover:text-[#3B4255] transition-all active:scale-95 disabled:grayscale"
-                         >
-                            <RefreshCw size={20} className={isRolling?'animate-spin':''}/> 
-                            <span className="tracking-widest uppercase">{isRolling ? 'Resonating...' : t('btn_reroll')}</span>
-                         </button>
-                         <button className="flex-1 py-4 rounded-2xl bg-[#D3BC8E] text-[#3B4255] font-bold shadow-lg active:scale-95 transition-transform disabled:grayscale uppercase tracking-widest">
-                            {t('confirm')}
-                         </button>
-                       </div>
-                       {actChar.preview_audio && (
-                         <div className="mt-6 p-4 bg-white/10 rounded-2xl backdrop-blur-md border border-white/5">
-                            <audio controls src={actChar.preview_audio} className="w-full h-8"/>
-                         </div>
-                       )}
+                  <div className="space-y-5">
+                    <div 
+                      onClick={handleTogglePlay}
+                      className={`h-16 rounded-2xl bg-[#F4F6FF]/5 dark:bg-black/20 border border-white/10 flex items-end px-6 pb-3 gap-[3px] cursor-pointer group transition-all hover:bg-[#F4F6FF]/10 ${actChar.preview_audio || isPlaying ? 'opacity-100' : 'opacity-20'}`}
+                    >
+                      <div className="play-btn-glow bg-[#8E97FD] p-2 rounded-full text-white self-center shrink-0">
+                        {isPlaying ? <Pause size={18} fill="currentColor"/> : <Play size={18} fill="currentColor"/>}
+                      </div>
+                      <div className="flex-1 flex items-end gap-[1px] h-10 mb-1 justify-center overflow-hidden">
+                        {Array.from({ length: 400 }).map((_, i) => {
+                          const h = Math.abs(Math.sin(i * 0.2)) * 0.6 + Math.random() * 0.4;
+                          return (
+                            <div key={i} className={`waveform-bar ${isPlaying ? 'waveform-animate' : ''}`} style={{ width: '2px', height: `${h * 100}%`, animationDelay: `${i * 0.02}s`, backgroundColor: isPlaying ? '#8E97FD' : '#5C639E' }} />
+                          );
+                        })}
+                      </div>
+                      <span className="text-[10px] font-bold text-[#8E97FD] self-center ml-2 italic shrink-0">00:04</span>
                     </div>
-                 </div>
+
+                    <div className="flex gap-4">
+                      <button onClick={reroll} disabled={isRolling} className="flex-1 py-3.5 rounded-2xl border-2 border-[#D3BC8E] text-[#D3BC8E] font-bold flex justify-center items-center gap-3 hover:bg-[#D3BC8E] hover:text-[#3B4255] transition-all disabled:opacity-50">
+                        <RefreshCw size={18} className={isRolling ? 'animate-spin' : ''} /> 
+                        <span className="tracking-widest uppercase text-xs">{isRolling ? 'Resonating...' : t('btn_reroll')}</span>
+                      </button>
+                      <button className="flex-1 py-3.5 rounded-2xl bg-[#D3BC8E] text-[#3B4255] font-bold shadow-lg uppercase tracking-widest text-xs active:scale-95">
+                        {t('confirm')}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <audio ref={audioRef} src={actChar?.preview_audio} onEnded={() => setIsPlaying(false)} className="hidden" />
               </div>
             </div>
           ) : (
-            <div className="h-full flex flex-col items-center justify-center opacity-20 animate-pulse">
-               <Shield size={80} className="mb-4 text-[#3B4255]"/>
-               <div className="font-genshin text-2xl font-bold uppercase tracking-[0.5em]">{t('ph_select')}</div>
+            <div className="h-full flex flex-col items-center justify-center opacity-20">
+               <Shield size={100} className="mb-6 text-[#3B4255] dark:text-[#D3BC8E]"/>
+               <div className="font-genshin text-2xl font-bold uppercase tracking-[0.6em]">{t('ph_select')}</div>
             </div>
           )}
         </section>

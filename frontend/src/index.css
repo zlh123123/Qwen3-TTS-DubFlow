@@ -7,21 +7,17 @@
 
 @layer base {
   body {
-    /* 增加 transition，切换主题时颜色会平滑过渡 */
     @apply transition-colors duration-300;
     font-family: 'Quicksand', sans-serif;
     color: #495366; 
     background-color: #F0F2F5; 
-    
-    /* 亮色背景网格 */
     background-image: 
       radial-gradient(circle at 50% 50%, rgba(255,255,255,0.8) 0%, rgba(240,242,245,1) 100%),
       url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 0l2 28 28 2-28 2-2 28-2-28-28-2 28-2z' fill='%23D3BC8E' fill-opacity='0.05' fill-rule='evenodd'/%3E%3C/svg%3E");
   }
 
-  /* --- 🟢 暗黑模式全局底色 --- */
   .dark body {
-    background-color: #1b1d22; /* 原神深色菜单底色 */
+    background-color: #1b1d22; 
     color: #ece5d8;
     background-image: 
       radial-gradient(circle at 50% 50%, rgba(44,49,63,0.7) 0%, rgba(27,29,34,1) 100%),
@@ -29,31 +25,21 @@
   }
 }
 
-/* 滚动条动画也要适配 */
-::-webkit-scrollbar { width: 8px; }
-::-webkit-scrollbar-track { background: #ECE5D8; }
-.dark ::-webkit-scrollbar-track { background: #2c313f; }
-::-webkit-scrollbar-thumb { background: #D3BC8E; border-radius: 4px; border: 2px solid #ECE5D8; }
-.dark ::-webkit-scrollbar-thumb { border-color: #2c313f; }
+/* 滚动条美化 */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(211, 188, 142, 0.4); border-radius: 10px; }
 
 @layer components {
-  /* --- 原神卡片适配 --- */
-  .genshin-card {
-    @apply bg-[#EBE5D9] border-2 border-[#D8CBA8] rounded-[2rem] shadow-sm relative overflow-hidden transition-all duration-300;
+  /* 容器 */
+  .genshin-card-flat {
+    @apply bg-[#EBE5D9]/60 backdrop-blur-md border-2 border-white/60 rounded-[3rem] shadow-xl transition-all duration-300;
   }
-  .dark .genshin-card {
-    @apply bg-[#2c313f] border-[#4a5366] shadow-none;
+  .dark .genshin-card-flat {
+    @apply bg-[#2c313f]/40 border-[#4a5366]/40 shadow-none;
   }
   
-  /* --- 派蒙菜单适配 --- */
-  .paimon-menu {
-    @apply bg-[#373F52]/90 backdrop-blur-md border border-[#6A7080] text-[#ECE5D8] rounded-[32px] shadow-xl transition-all;
-  }
-  .dark .paimon-menu {
-    @apply bg-[#12141a]/95 border-[#3b4255];
-  }
-
-  /* --- 主按钮 (金色祈愿风) --- */
+  /* 按钮 */
   .genshin-btn-primary {
     @apply bg-gradient-to-b from-[#F2EBDC] to-[#D3BC8E] border border-[#CBAA76] 
     text-[#4A5366] font-bold rounded-full px-6 py-2 shadow-md
@@ -61,37 +47,62 @@
     flex items-center justify-center gap-2 relative overflow-hidden;
   }
   .dark .genshin-btn-primary {
-    /* 暗色模式下按钮文字可以稍微深一点或者加重发光 */
     @apply from-[#ece5d8] to-[#BC9B67] border-[#9A7D48] text-[#333];
   }
   
-  /* --- 圆形次要按钮 --- */
   .genshin-btn-circle {
-    @apply w-10 h-10 rounded-full bg-[#EBE5D9] border-2 border-[#D3BC8E] 
+    @apply w-12 h-12 rounded-full bg-[#EBE5D9] border-2 border-[#D3BC8E] 
     text-[#4A5366] flex items-center justify-center shadow-sm 
-    hover:bg-white transition-colors active:scale-90;
+    hover:bg-white transition-all active:scale-90;
   }
   .dark .genshin-btn-circle {
     @apply bg-[#3b4255] border-[#4a5366] text-[#ece5d8] hover:bg-[#4a5366];
   }
 
-  /* --- 输入框适配 --- */
-  .genshin-input {
-    @apply bg-[#F7F3EB] border-2 border-[#D8CBA8] rounded-xl text-[#4A5366] placeholder-[#A4AAB6]
-    focus:border-[#D3BC8E] focus:ring-2 focus:ring-[#D3BC8E]/20 outline-none transition-all;
+  /* 极简输入框 */
+  .genshin-input-simple {
+    @apply w-full bg-[#F7F3EB]/60 border-2 border-transparent rounded-2xl px-4 py-2.5 
+           font-bold text-[#495366] transition-all duration-200 outline-none
+           focus:border-[#D3BC8E] focus:bg-white focus:shadow-md
+           placeholder:text-[#A4AAB6]/50;
   }
-  .dark .genshin-input {
-    @apply bg-[#1b1d22] border-[#4a5366] text-[#ece5d8] focus:border-[#D3BC8E];
+  .dark .genshin-input-simple {
+    @apply bg-[#1b1d22]/40 text-[#ece5d8] focus:bg-[#1b1d22] focus:border-[#D3BC8E];
   }
 
-  .font-genshin {
-    font-family: 'Cinzel', serif;
-  }
+  /* 装饰 */
+  .font-genshin { font-family: 'Cinzel', serif; }
+  .avatar-gradient { background: linear-gradient(180deg, #5C5C70 0%, #3B4255 100%); }
 }
 
-.selected-ring {
-  box-shadow: 0 0 0 3px #D3BC8E, 0 0 0 6px #F7F3EB;
+/* --- 🟢 核心音频波形动画：底部对齐竖立 --- */
+@keyframes waveform-stand-up {
+  0%, 100% { transform: scaleY(0.4); opacity: 0.6; }
+  50% { transform: scaleY(1.2); opacity: 1; }
 }
-.dark .selected-ring {
-  box-shadow: 0 0 0 3px #D3BC8E, 0 0 0 6px #1b1d22;
+
+.waveform-bar {
+  /* 使用紫蓝色，顶部圆角，底部方正以示“扎根” */
+  @apply bg-[#8E97FD] rounded-t-full rounded-b-sm transition-all duration-300 ease-out;
+  /* 🟢 关键：设置变换原点在底部 */
+  transform-origin: bottom; 
 }
+
+.waveform-animate {
+  animation: waveform-stand-up 0.8s ease-in-out infinite;
+}
+
+.play-btn-glow {
+  box-shadow: 0 0 15px rgba(142, 151, 253, 0.4);
+}
+
+.animate-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-thumb { @apply bg-[#D3BC8E]/30 rounded-full; }
