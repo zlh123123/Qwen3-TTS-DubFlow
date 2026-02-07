@@ -20,7 +20,7 @@ def load_prompt(language: str) -> str:
         # 默认中文，包括其他语言
         prompt_file = os.path.join(prompt_dir, "zh.prompt")
         
-    print(f"Loading prompt file: {prompt_file}")
+    # print(f"Loading prompt file: {prompt_file}")
     
     if os.path.exists(prompt_file):
         with open(prompt_file, 'r', encoding='utf-8') as f:
@@ -90,7 +90,7 @@ def analyze_characters_handler(task: Task, db: Session):
         model=model,
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"【小说文本内容】:\n\n{content[:100]}"},  
+            {"role": "user", "content": f"【小说文本内容】:\n\n{content[:1000]}"},  
         ],
         temperature=0.1,
         max_tokens=8192,
