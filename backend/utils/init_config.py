@@ -60,17 +60,21 @@ DEFAULT_CONFIGS = [
     },
     # C2. 本地vllm部署
     {
-        "key": "tts.vllm.url", "group": "tts_settings", "label": "vLLM 服务地址",
-        "type": "text", "options": None, "default": "http://localhost:8000", "value": "http://localhost:8000"
+        "key": "tts.vllm.base_url", "group": "tts_settings", "label": "vLLM Base模型服务地址",
+        "type": "text", "options": None, "default": "http://localhost:6008", "value": "http://localhost:6008"
+    },
+    {
+        "key": "tts.vllm.vd_url", "group": "tts_settings", "label": "vLLM VoiceDesign模型服务地址",
+        "type": "text", "options": None, "default": "http://localhost:6006", "value": "http://localhost:6006"
     },
     # C3. Autodl穿透
     {
-        "key": "tts.autodl.base_port", "group": "tts_settings", "label": "基础模型本地端口",
-        "type": "text", "options": None, "default": "6006", "value": "6006"
+        "key": "tts.autodl.base_port", "group": "tts_settings", "label": "Base模型本地端口",
+        "type": "text", "options": None, "default": "6008", "value": "6008"
     },
     {
-        "key": "tts.autodl.vd_port", "group": "tts_settings", "label": "捏人模型本地端口",
-        "type": "text", "options": None, "default": "6007", "value": "6007"
+        "key": "tts.autodl.vd_port", "group": "tts_settings", "label": "VoiceDesign模型本地端口",
+        "type": "text", "options": None, "default": "6006", "value": "6006"
     },
     # C4. 阿里云API
     {
