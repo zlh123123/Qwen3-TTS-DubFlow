@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base, SessionLocal
-from routers import projects, config  
+from routers import projects, config, characters, tasks
 from utils.init_config import init_settings 
 from models import project, config as config_model 
 from workers.worker import start_worker
@@ -40,6 +40,8 @@ app.add_middleware(
 # 注册路由
 app.include_router(projects.router)
 app.include_router(config.router) 
+app.include_router(characters.router)
+app.include_router(tasks.router)
 
 @app.get("/")
 def read_root():

@@ -22,7 +22,7 @@ class CharacterUpdate(BaseModel):
 
 # back->front: 角色响应
 class CharacterResponse(BaseModel):
-    id: int
+    id: str
     project_id: str
     name: str
     gender: Optional[str] = None

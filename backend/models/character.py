@@ -4,7 +4,7 @@ from database import Base
 class Character(Base):
     __tablename__ = "characters"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(String, primary_key=True)
     project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     name = Column(String, nullable=False)
     gender = Column(String, nullable=True)  # male/female/unknown

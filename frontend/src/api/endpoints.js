@@ -56,8 +56,8 @@ export const getCharacters = async (pid) => {
 };
 
 // 语音试听 (异步任务)
-export const previewVoice = async (data) => {
-  return client.post('/voices/preview', data);
+export const previewVoice = async (charId) => {
+  return client.post(`/characters/${charId}/voice`);
 };
 
 // 确认定妆

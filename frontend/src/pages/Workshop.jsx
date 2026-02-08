@@ -75,11 +75,7 @@ export default function Workshop() {
   const reroll = async () => {
     if (!actChar) return;
     try {
-      const res = await API.previewVoice({
-        character_id: actChar.id,
-        text: actChar.ref_text,
-        prompt: actChar.prompt
-      });
+      const res = await API.previewVoice(actChar.id);
       startPolling(res.task_id || res.data.task_id, (result) => {
         mutate(actID, { preview_audio: result.audio_url });
       });

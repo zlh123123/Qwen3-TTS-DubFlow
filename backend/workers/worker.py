@@ -6,13 +6,13 @@ from models.task import Task
 from models.project import Project
 from .analyze_characters import analyze_characters_handler
 # from parse_script import parse_script_handler
-# from synthesis_voicedesign import synthesis_voicedesign_handler
+from .synthesis_voicedesign import synthesis_voicedesign_handler
 
 
 HANDLERS = {
     "analyze_char": analyze_characters_handler,
     # "parse_script": parse_script_handler,
-    # "synthesis_voicedesign": synthesis_voicedesign_handler,
+    "synthesis_voicedesign": synthesis_voicedesign_handler,
 }
 
 def process_task(task: Task, db: Session):
@@ -21,7 +21,7 @@ def process_task(task: Task, db: Session):
         result = handler(task, db)
         
         task.status = "success"
-        task.result = result  # JSON结果
+        task.result = result 
         if task.type == "analyze_char":
             project = db.query(Project).filter(Project.id == task.project_id).first()
             if project:

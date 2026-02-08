@@ -8,6 +8,7 @@ from models.config import Config
 from openai import OpenAI
 import openai
 import logging
+import uuid
 
 def load_prompt(language: str) -> str:
     """根据语言加载提示词"""
@@ -112,6 +113,7 @@ def analyze_characters_handler(task: Task, db: Session):
         
         for char_data in characters_data:
             char = Character(
+                id=str(uuid.uuid4()),
                 project_id=project_id,
                 name=char_data["name"],
                 gender=char_data["gender"],

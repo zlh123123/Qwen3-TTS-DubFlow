@@ -11,7 +11,7 @@ import uuid
 router = APIRouter(prefix="/api/characters", tags=["Characters"])
 
 @router.put("/{character_id}", response_model=CharacterResponse)
-def update_character(character_id: int, update: CharacterUpdate, db: Session = Depends(get_db)):
+def update_character(character_id: str, update: CharacterUpdate, db: Session = Depends(get_db)):
     char = db.query(Character).filter(Character.id == character_id).first()
     if not char:
         raise HTTPException(status_code=404, detail="Character not found")
@@ -26,7 +26,7 @@ def update_character(character_id: int, update: CharacterUpdate, db: Session = D
     return char
 
 @router.post("/{character_id}/voice")
-def preview_voice(character_id: int, db: Session = Depends(get_db)):
+def preview_voice(character_id: str, db: Session = Depends(get_db)):
     char = db.query(Character).filter(Character.id == character_id).first()
     if not char:
         raise HTTPException(status_code=404, detail="Character not found")
