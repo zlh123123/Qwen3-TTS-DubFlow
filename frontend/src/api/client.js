@@ -2,7 +2,6 @@ import axios from 'axios';
 
 // 创建 axios 实例
 const client = axios.create({
-  // 注意：这里先留空，依赖 Vite 的代理功能转发到后端
   baseURL: '/api', 
   timeout: 30000, // 请求超时时间 30秒
   headers: {
@@ -10,7 +9,6 @@ const client = axios.create({
   },
 });
 
-// 响应拦截器（可选：统一处理错误）
 client.interceptors.response.use(
   (response) => response.data,
   (error) => {
