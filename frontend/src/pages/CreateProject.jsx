@@ -10,7 +10,7 @@ import CreateProjectModal from '../components/CreateProjectModal';
 import { useLang } from '../contexts/LanguageContext';
 
 export default function CreateProject() {
-  const { t, lang } = useLang(); // 🟢 引入 lang 用于日期国际化
+  const { t, lang } = useLang(); 
   const nav = useNavigate();
   
   const [list, setList] = useState([]);
@@ -150,7 +150,7 @@ export default function CreateProject() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#D3BC8E]" size={18} />
               <input 
                 type="text" 
-                placeholder={t('search_ph')} // 🟢 替换硬编码
+                placeholder={t('search_ph')} 
                 value={searchTerm} 
                 onChange={(e) => setSearchTerm(e.target.value)} 
                 className="pl-11 pr-4 py-2.5 w-64 bg-white/80 dark:bg-[#2C313F] border-2 border-[#D8CBA8] rounded-full outline-none focus:border-[#D3BC8E] transition-all text-sm font-bold shadow-sm" 
@@ -162,9 +162,9 @@ export default function CreateProject() {
                 onChange={(e) => setSortBy(e.target.value)} 
                 className="appearance-none pl-5 pr-12 py-2.5 bg-[#3B4255] border-2 border-[#D3BC8E] text-[#ECE5D8] rounded-full text-xs font-bold outline-none cursor-pointer"
               >
-                <option value="newest">{t('sort_new')}</option> // 🟢 替换硬编码
-                <option value="oldest">{t('sort_old')}</option> // 🟢 替换硬编码
-                <option value="name">{t('sort_name')}</option>   // 🟢 替换硬编码
+                <option value="newest">{t('sort_new')}</option> 
+                <option value="oldest">{t('sort_old')}</option> 
+                <option value="name">{t('sort_name')}</option>   
               </select>
               <ArrowUpDown className="absolute right-4 text-[#D3BC8E] pointer-events-none" size={14} />
             </div>

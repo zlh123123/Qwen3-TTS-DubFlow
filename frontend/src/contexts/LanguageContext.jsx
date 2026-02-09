@@ -3,7 +3,6 @@ import * as API from '../api/endpoints';
 
 const LangCtx = createContext();
 
-// 🟢 词典：已根据要求更新项目列表、新建项目、下一步及主要人物相关映射
 const DICT = {
   'zh-CN': {
     // 通用 (General)
@@ -16,12 +15,12 @@ const DICT = {
     back: '返回',
     finish: '完成',
     abandon: '舍弃',
-    action_go: '下一步', // 原为：出击
+    action_go: '下一步',
 
     // 首页 (Home / Project List)
-    quest_log: '项目列表', // 原为：项目委托
+    quest_log: '项目列表',
     quest_sub: 'Quest Journal',
-    new_quest: '新建项目', // 原为：新委托
+    new_quest: '新建项目',
     search_ph: '搜索项目...',
     sort_new: '最新创建',
     sort_old: '最早创建',
@@ -71,7 +70,7 @@ const DICT = {
     // 工坊与演播室 (Workshop)
     party_setup: '主要人物',
     members: '成员',
-    voice_title: '语音试听',
+    voice_title: '语音调试', // 已合并重复项
     studio_title: '剧情回顾',
     cast_list: '角色表',
     params: '参数配置',
@@ -92,14 +91,13 @@ const DICT = {
     ph_prompt: '描述音色，如：成熟、温柔...',
     ph_ref_text: '用于生成试听音频的文本...',
     ph_select: '请选择成员进行整备',
-    btn_reroll: '重新生成',
+    btn_reroll: '生成音频',
     btn_syncing: '生成中...',
     del_confirm_char: '确定要删除这名成员吗？',
     msg_generate_failed: '生成失败',
   },
 
   'en-US': {
-    // General
     app_title: 'DUBFLOW',
     loading: 'Loading...',
     confirm: 'Confirm',
@@ -111,7 +109,6 @@ const DICT = {
     abandon: 'Abandon',
     action_go: 'Next',
 
-    // Home
     quest_log: 'Project List',
     quest_sub: 'Mission Records',
     new_quest: 'New Project',
@@ -121,7 +118,6 @@ const DICT = {
     sort_name: 'Name (A-Z)',
     del_confirm: 'Are you sure? All related audio files will be deleted.',
 
-    // States
     status_created: 'Created',
     status_analyzing: 'Analyzing',
     status_characters_ready: 'Characters Ready',
@@ -129,7 +125,6 @@ const DICT = {
     status_synthesizing: 'Synthesizing',
     status_completed: 'Completed',
 
-    // Create Modal
     project_codename: 'Project Codename',
     resources_label: 'Resources (TXT Only)',
     upload_ph: 'Click or drag files here',
@@ -138,7 +133,6 @@ const DICT = {
     word_count: 'Words',
     est_time: 'Est. Duration',
 
-    // Settings
     settings_title: 'Settings',
     settings_sub: 'SYSTEM CONFIG',
     tab_app: 'Interface',
@@ -148,7 +142,6 @@ const DICT = {
 
     'app.theme_mode': 'Theme Mode',
     'app.language': 'System Language',
-
     'llm.active_provider': 'Active LLM Provider',
     'llm.deepseek.api_key': 'DeepSeek API Key',
     'llm.qwen.api_key': 'Qwen API Key',
@@ -179,7 +172,6 @@ const DICT = {
     btn_saving: 'Saving...',
     save_fail: 'Failed to save config',
 
-    // Workshop
     party_setup: 'Key Characters',
     members: 'Members',
     voice_title: 'Voice Preview',
@@ -189,7 +181,6 @@ const DICT = {
     btn_batch: 'Batch Gen',
     chk_skip: 'Skip Ready',
 
-    // Character Fields
     attr_title: 'Character Bio',
     lbl_name: 'Name',
     lbl_gender: 'Gender',
@@ -203,14 +194,13 @@ const DICT = {
     ph_prompt: 'Describe vibe, e.g. gentle...',
     ph_ref_text: 'Text for voice preview...',
     ph_select: 'Select a member to setup',
-    btn_reroll: 'Regenerate',
+    btn_reroll: 'Generate Voice',
     btn_syncing: 'Syncing...',
     del_confirm_char: 'Delete this character?',
     msg_generate_failed: 'Failed to generate',
   },
 
   'ja-JP': {
-    // General
     app_title: 'DUBFLOW',
     loading: '読み込み中...',
     confirm: '確認',
@@ -222,7 +212,6 @@ const DICT = {
     abandon: '中止',
     action_go: '次へ',
 
-    // Home
     quest_log: 'プロジェクト一覧',
     quest_sub: 'Quest Journal',
     new_quest: '新規作成',
@@ -232,7 +221,6 @@ const DICT = {
     sort_name: '名前順',
     del_confirm: 'このプロジェクトを削除しますか？関連する音声ファイルも削除されます。',
 
-    // States
     status_created: '作成済み',
     status_analyzing: '分析中',
     status_characters_ready: 'キャラ準備完了',
@@ -240,7 +228,6 @@ const DICT = {
     status_synthesizing: '合成中',
     status_completed: '完了',
 
-    // Create Modal
     project_codename: '任務コード',
     resources_label: 'リソース (TXTのみ)',
     upload_ph: 'クリックまたはファイルをドロップ',
@@ -249,7 +236,6 @@ const DICT = {
     word_count: '文字数',
     est_time: '予想時間',
 
-    // Settings
     settings_title: 'システム設定',
     settings_sub: 'SYSTEM CONFIG',
     tab_app: 'インターフェース',
@@ -289,19 +275,16 @@ const DICT = {
     btn_saving: '保存中...',
     save_fail: '保存に失敗しました',
 
-    // Workshop
     party_setup: '主要登場人物',
     members: 'メンバー',
-    voice_title: '音声プレビュー',
+    voice_title: '音声調整', // 已合并重复项
     studio_title: 'ストーリー回想',
     cast_list: '登場人物',
     params: 'インスペクター',
     btn_batch: '一括生成',
     chk_skip: '生成済みをスキップ',
 
-    // Character Fields
     attr_title: 'プロフィール',
-    voice_title: '音声調整',
     lbl_name: '名前',
     lbl_gender: '性別',
     lbl_age: '年齢',
@@ -314,7 +297,7 @@ const DICT = {
     ph_prompt: '音色の説明...',
     ph_ref_text: '音声プレビュー用のテキスト...',
     ph_select: 'メンバーを選択してください',
-    btn_reroll: '再生成',
+    btn_reroll: '生成音色',
     btn_syncing: '生成中...',
     del_confirm_char: 'このキャラを削除しますか？',
     msg_generate_failed: '生成に失敗しました',

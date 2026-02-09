@@ -75,7 +75,6 @@
   .avatar-gradient { background: linear-gradient(180deg, #5C5C70 0%, #3B4255 100%); }
 }
 
-/* --- 🟢 核心音频波形动画：底部对齐竖立 --- */
 @keyframes waveform-stand-up {
   0%, 100% { transform: scaleY(0.4); opacity: 0.6; }
   50% { transform: scaleY(1.2); opacity: 1; }
@@ -84,7 +83,6 @@
 .waveform-bar {
   /* 使用紫蓝色，顶部圆角，底部方正以示“扎根” */
   @apply bg-[#8E97FD] rounded-t-full rounded-b-sm transition-all duration-300 ease-out;
-  /* 🟢 关键：设置变换原点在底部 */
   transform-origin: bottom; 
 }
 

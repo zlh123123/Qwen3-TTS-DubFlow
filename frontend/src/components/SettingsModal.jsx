@@ -38,15 +38,20 @@ export default function SettingsModal({ open, close }) {
     }
   }, [open]);
 
-  // 2. 动态联动过滤逻辑
+  // 🟢 2. 动态联动过滤逻辑：在此处彻底隐藏“主题模式”
   const shouldShowItem = (item) => {
+    // 隐藏主题模式项
+    if (item.key === 'app.theme_mode') return false;
+
     const activeLLM = cfg['llm.active_provider'];
     const activeTTS = cfg['tts.backend'];
 
+    // 语言模型关联显示
     if (item.key.startsWith('llm.deepseek.')) return activeLLM === 'deepseek';
     if (item.key.startsWith('llm.qwen.')) return activeLLM === 'qwen';
     if (item.key.startsWith('llm.selfdef.')) return activeLLM === 'selfdef';
 
+    // 语音后端关联显示 (此时 activeTTS 已无法选到 local_pytorch)
     if (item.key.startsWith('tts.local.')) return activeTTS === 'local_pytorch';
     if (item.key.startsWith('tts.vllm.')) return activeTTS === 'local_vllm';
     if (item.key.startsWith('tts.autodl.')) return activeTTS === 'autodl';
@@ -69,6 +74,7 @@ export default function SettingsModal({ open, close }) {
       await API.updateSettings(payload);
 
       if (cfg['app.language']) setLang(cfg['app.language']);
+      // 虽然隐藏了 UI，但底层 setTheme 仍可保留，如果需要固定主题，在此处修改
       if (cfg['app.theme_mode']) setTheme(cfg['app.theme_mode']);
       
       close();
@@ -80,20 +86,26 @@ export default function SettingsModal({ open, close }) {
     }
   };
 
-  // 4. 控件渲染函数
+  // 🟢 4. 控件渲染函数：在此处剔除下拉框中的 local_pytorch
   const renderInput = (item) => {
     const value = cfg[item.key] || '';
     const baseClass = "genshin-input w-full px-4 py-2.5 text-sm transition-all focus:ring-2 focus:ring-[#D3BC8E]/20";
 
     switch (item.type) {
       case 'select':
+        // 过滤掉 local_pytorch 选项
+        let filteredOptions = item.options || [];
+        if (item.key === 'tts.backend') {
+          filteredOptions = filteredOptions.filter(opt => opt !== 'local_pytorch');
+        }
+
         return (
           <select 
             value={value} 
             onChange={(e) => setCfg({...cfg, [item.key]: e.target.value})}
             className={baseClass}
           >
-            {item.options?.map(opt => (
+            {filteredOptions.map(opt => (
               <option key={opt} value={opt}>
                 {t(`opt.${opt}`) !== `opt.${opt}` ? t(`opt.${opt}`) : opt}
               </option>
@@ -106,10 +118,10 @@ export default function SettingsModal({ open, close }) {
           <div 
             onClick={() => setCfg({...cfg, [item.key]: isTrue ? 'false' : 'true'})}
             className={`w-14 h-7 rounded-full relative cursor-pointer transition-all border-2 ${
-              isTrue ? 'bg-[#D3BC8E] border-[#D3BC8E] shadow-[0_0_8px_rgba(211,188,142,0.4)]' : 'bg-gray-400/20 border-gray-400/30'
+              isTrue ? 'bg-[#D3BC8E] border-[#D3BC8E]' : 'bg-gray-400/20 border-gray-400/30'
             }`}
           >
-            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all shadow-sm ${isTrue ? 'left-8' : 'left-1'}`} />
+            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${isTrue ? 'left-8' : 'left-1'}`} />
           </div>
         );
       case 'password':
@@ -125,26 +137,17 @@ export default function SettingsModal({ open, close }) {
             />
             <button 
               onClick={() => setShowPassword({...showPassword, [item.key]: !isVisible})}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#D3BC8E] hover:text-[#3B4255]"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#D3BC8E]"
             >
               {isVisible ? <EyeOff size={16}/> : <Eye size={16}/>}
             </button>
           </div>
         );
-      case 'number':
-        return (
-          <input 
-            type="number" 
-            step="0.1"
-            value={value}
-            onChange={(e) => setCfg({...cfg, [item.key]: e.target.value})}
-            className={baseClass}
-          />
-        );
       default:
         return (
           <input 
-            type="text" 
+            type={item.type === 'number' ? 'number' : 'text'}
+            step={item.type === 'number' ? "0.1" : undefined}
             value={value}
             onChange={(e) => setCfg({...cfg, [item.key]: e.target.value})}
             className={baseClass}
@@ -163,18 +166,16 @@ export default function SettingsModal({ open, close }) {
   ];
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <div className="genshin-card w-full max-w-5xl h-[720px] flex overflow-hidden border-[3px] border-[#D3BC8E] bg-[#ECE5D8] dark:bg-[#1B1D22]">
         
         {/* 左侧导航栏 */}
         <div className="w-56 bg-[#3B4255] p-6 flex flex-col border-r-2 border-[#D3BC8E]/30 shrink-0">
-          {/* 标题区 */}
           <div className="flex items-center gap-2 mb-8 px-2 text-[#D3BC8E]">
              <Settings2 size={24}/>
              <span className="font-genshin text-[#ECE5D8] text-xl">{t('settings_title')}</span>
           </div>
           
-          {/* 标签页导航 */}
           <div className="flex-1 flex flex-col gap-2">
             {tabs.map(tab => (
               <button
@@ -191,25 +192,9 @@ export default function SettingsModal({ open, close }) {
             ))}
           </div>
 
-          {/* 🟢 底部链接区 */}
           <div className="pt-4 mt-4 border-t border-[#D3BC8E]/20 flex flex-col gap-2">
-            <a 
-              href="https://github.com/zlh123123/Qwen3-TTS-DubFlow" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="flex items-center gap-3 px-4 py-2 text-xs font-bold text-[#ECE5D8]/40 hover:text-[#D3BC8E] transition-colors group"
-            >
-              <Github size={16} className="group-hover:scale-110 transition-transform"/> 
-              <span>GitHub</span>
-            </a>
-            <a 
-              href="https://github.com/zlh123123/Qwen3-TTS-DubFlow/blob/main/LICENSE" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="flex items-center gap-3 px-4 py-2 text-xs font-bold text-[#ECE5D8]/40 hover:text-[#D3BC8E] transition-colors group"
-            >
-              <ShieldCheck size={16} className="group-hover:scale-110 transition-transform"/> 
-              <span>License</span>
+            <a href="https://github.com/zlh123123/Qwen3-TTS-DubFlow" target="_blank" className="flex items-center gap-3 px-4 py-2 text-xs font-bold text-[#ECE5D8]/40 hover:text-[#D3BC8E]">
+              <Github size={16}/> <span>GitHub</span>
             </a>
             <div className="px-4 text-[9px] text-[#ECE5D8]/20 font-mono mt-2 uppercase tracking-tighter">
               Build v1.0.0-stable
@@ -219,7 +204,6 @@ export default function SettingsModal({ open, close }) {
 
         {/* 右侧内容 */}
         <div className="flex-1 flex flex-col min-w-0">
-          {/* 内容头部 */}
           <div className="px-10 py-6 flex justify-between items-center bg-white/5 border-b border-[#D3BC8E]/20">
             <div>
               <h3 className="text-2xl font-genshin font-bold text-[#3B4255] dark:text-[#ECE5D8] tracking-widest uppercase">
@@ -232,10 +216,9 @@ export default function SettingsModal({ open, close }) {
             </button>
           </div>
 
-          {/* 表单内容区 */}
-          <div className="flex-1 p-10 overflow-y-auto custom-scrollbar space-y-8 bg-gradient-to-b from-transparent to-black/5">
+          <div className="flex-1 p-10 overflow-y-auto custom-scrollbar space-y-8">
             {!meta ? (
-              <div className="h-full flex flex-col items-center justify-center opacity-40 italic text-gray-500">
+              <div className="h-full flex flex-col items-center justify-center opacity-40">
                 <Loader2 className="animate-spin mb-2" size={32}/>
                 {t('loading')}
               </div>
@@ -243,15 +226,12 @@ export default function SettingsModal({ open, close }) {
               (meta[activeTab] || [])
                 .filter(item => shouldShowItem(item))
                 .map(item => (
-                  <div 
-                    key={item.key} 
-                    className="flex items-start justify-between gap-12 group animate-in fade-in slide-in-from-left-2 duration-300"
-                  >
+                  <div key={item.key} className="flex items-start justify-between gap-12 group animate-in slide-in-from-left-2">
                     <div className="flex-1">
-                      <label className="text-sm font-bold text-[#495366] dark:text-[#ECE5D8] group-hover:text-[#D3BC8E] transition-colors">
+                      <label className="text-sm font-bold text-[#495366] dark:text-[#ECE5D8] group-hover:text-[#D3BC8E]">
                         {t(item.key) !== item.key ? t(item.key) : item.label}
                       </label>
-                      <div className="text-[10px] text-gray-400 font-mono mt-1 opacity-50 select-all tracking-tighter lowercase">{item.key}</div>
+                      <div className="text-[10px] text-gray-400 font-mono mt-1 opacity-50 tracking-tighter lowercase">{item.key}</div>
                     </div>
                     <div className="w-80 flex-shrink-0">
                       {renderInput(item)}
@@ -261,12 +241,11 @@ export default function SettingsModal({ open, close }) {
             )}
           </div>
 
-          {/* 底部保存按钮 */}
           <div className="px-10 py-6 bg-[#3B4255]/5 border-t-2 border-[#D3BC8E]/10 flex justify-end">
              <button 
               onClick={handleSave}
               disabled={loading}
-              className="genshin-btn-primary px-16 py-3 shadow-2xl flex items-center gap-3 active:scale-95 disabled:opacity-50"
+              className="genshin-btn-primary px-16 py-3 flex items-center gap-3 active:scale-95 disabled:opacity-50"
              >
                {loading ? <Loader2 className="animate-spin" size={20}/> : <Save size={20}/>}
                <span className="font-genshin tracking-widest font-bold">{t('btn_save')}</span>

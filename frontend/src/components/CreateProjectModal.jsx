@@ -18,10 +18,10 @@ export default function CreateProjectModal({ open, close, onCreated }) {
     close();
   };
 
-  // 处理文件读取（支持多选）
+  // 处理文件读取
   const handleFiles = (files) => {
     const newFiles = Array.from(files).filter(f => f.name.endsWith('.txt'));
-    if (newFiles.length === 0) return; // 建议此处也可以国际化 alert 消息
+    if (newFiles.length === 0) return; 
 
     if (!title && newFiles.length > 0) {
       setTitle(newFiles[0].name.replace('.txt', ''));
@@ -60,7 +60,7 @@ export default function CreateProjectModal({ open, close, onCreated }) {
         const analyzeResponse = await API.analyzeCharacters(d.id);
         console.log('角色分析任务ID:', analyzeResponse.task_id);
 
-        // 更新项目状态为 analyzing（前端立即显示）
+        // 更新项目状态为 analyzing
         d.state = 'analyzing';
 
         onCreated(d);
