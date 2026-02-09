@@ -2,32 +2,25 @@ import os
 import uuid
 import requests
 import base64
+import logging
+import json
 from sqlalchemy.orm import Session
 from models.task import Task
 from models.config import Config
 from models.character import Character
 from models.project import Project
-import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def get_tts_config(db: Session):
     backend = db.query(Config).filter(Config.key == "tts.backend").first()
-    if not backend:
-        raise ValueError("TTS backend not configured")
-    backend_value = backend.value
+    backend_value = backend.value if backend else "autodl"
     
     config = {"backend": backend_value}
     
-    if backend_value == "local_pytorch":
-        model_vd_path = db.query(Config).filter(Config.key == "tts.local.model_vd_path").first()
-        device = db.query(Config).filter(Config.key == "tts.local.device").first()
-        config.update({
-            "model_vd_path": model_vd_path.value if model_vd_path else None,
-            "device": device.value if device else "cuda"
-        })
-    elif backend_value == "local_vllm":
+
+    if backend_value == "local_vllm":
         vd_url = db.query(Config).filter(Config.key == "tts.vllm.vd_url").first()
         config.update({
             "vd_url": vd_url.value if vd_url else "http://localhost:6006"
@@ -54,7 +47,7 @@ def call_tts_api(config, payload, save_path):
     
     if backend == "autodl":
         port = config["vd_port"]
-        url = f"http://localhost:{port}/v1/audio/speech"
+        url = f"http://127.0.0.1:{port}/v1/audio/speech"
     elif backend == "local_vllm":
         url = config["vd_url"] + "/v1/audio/speech"
     elif backend == "aliyun":
@@ -97,13 +90,17 @@ def call_tts_api(config, payload, save_path):
             raise Exception(f"Aliyun TTS API error: {response.status_code} - {response.text}")
     
     if backend != "aliyun":
-        response = requests.post(url, json=payload)
-    
-    if response.status_code != 200:
-        raise Exception(f"TTS API error: {response.status_code} - {response.text}")
-    
-    with open(save_path, "wb") as f:
-        f.write(response.content)
+        try:
+            response = requests.post(url, json=payload, timeout=120)
+            
+            if response.status_code != 200:
+                raise Exception(f"TTS API error: {response.status_code} - {response.text}")
+            
+            with open(save_path, "wb") as f:
+                f.write(response.content)
+                
+        except requests.exceptions.ConnectionError:
+            raise Exception(f"Connection refused. Please check if SSH tunnel is open for port {config.get('vd_port', '6006')}")
     
     return save_path
 
@@ -127,11 +124,11 @@ def synthesis_voicedesign_handler(task: Task, db: Session):
     tts_config = get_tts_config(db)
     
     api_payload = {
-        "model": "Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+        # "model": "Qwen3-TTS-VoiceDesign",
         "task_type": "VoiceDesign",
         "input": text,
         "instructions": instruct,
-        "language": "auto",
+        "language": "Auto",
         "max_new_tokens": 2048
     }
     
