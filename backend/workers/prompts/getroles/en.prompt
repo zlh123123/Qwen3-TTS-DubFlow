@@ -14,7 +14,7 @@ Output ONLY a JSON list without any Markdown tags. Format:
     "age": "Age Group (e.g., 12yo Girl / 50yo Smoker / Ageless AI)",
     "personality_tags": "Keywords (e.g., Anxious, Commander, Sarcastic)",
     "voice_prompt": "[Timbre]... [Speed]... [Emotion]... [Articulation]...",
-    "ref_text": "The most representative line of dialogue. Requirements: 1. Strongest emotion available; 2. Length between 10-25 words; 3. If no perfect line exists, create one based on the persona."
+    "ref_text": "The most representative line. Requirements: 1. Strongest emotion available; 2. Length between 25-40 words; 3. If no perfect line exists, create one based on the persona."
   }
 ]
 
@@ -31,6 +31,6 @@ Strictly adhere to the depth of description and selection criteria below:
 
 # Constraints
 1. `voice_prompt` MUST cover Timbre, Speed, Emotion, and Articulation.
-2. `ref_text` is crucial for voice cloning. Select the line with the **strongest emotion** or **most distinct style**. 
+2. `ref_text` is crucial for voice cloning. It must be at least 25 words long to capture the character's natural prosody and rhythm.
 3. Use logical [Voice Imagination] to fill gaps if description is sparse.
 4. Must output a valid JSON list.
