@@ -142,6 +142,10 @@ def synthesis_voicedesign_handler(task: Task, db: Session):
     
     try:
         call_tts_api(tts_config, api_payload, save_path)
+        char.ref_audio_path = temp_filename
+        char.is_confirmed = False  
+        
+        db.commit() 
         
         audio_url = f"/static/temp/{temp_filename}"
         return {"audio_url": audio_url}

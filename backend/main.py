@@ -7,6 +7,7 @@ from models import project, config as config_model
 from workers.worker import start_worker
 from contextlib import asynccontextmanager
 import os
+from fastapi.staticfiles import StaticFiles
 
 # 创建 storage 目录
 os.makedirs("storage", exist_ok=True)
@@ -27,6 +28,8 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(lifespan=lifespan)
+
+app.mount("/static", StaticFiles(directory="storage"), name="static")
 
 # CORS 设置 
 app.add_middleware(
