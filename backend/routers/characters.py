@@ -21,7 +21,7 @@ def create_character(character: CharacterCreate, db: Session = Depends(get_db)):
         description=character.description,
         prompt=character.prompt,
         ref_text=character.ref_text,
-        ref_audio_path=character.ref_audio_path
+        ref_audio_path=None
     )
     db.add(new_char)
     db.commit()

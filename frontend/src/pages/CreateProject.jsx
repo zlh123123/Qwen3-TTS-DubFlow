@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Settings, Plus, Trash2, Clock, Map, Compass, 
-  Sparkles, ChevronRight, Search, ArrowUpDown, Loader2 
+  Sparkles, ChevronRight, Search, ArrowUpDown, Loader2, Lock 
 } from 'lucide-react';
 import * as API from '../api/endpoints';
 import SettingsModal from '../components/SettingsModal';
@@ -38,17 +38,15 @@ export default function CreateProject() {
     }
   };
 
+  // 始终轮询逻辑
   useEffect(() => {
     fetchProjects();
+    const timer = setInterval(() => {
+      fetchProjects(true);
+    }, 2000);
+    console.log("Started global polling for project status...");
+    return () => clearInterval(timer);
   }, []);
-
-  useEffect(() => {
-    const needPolling = list.some(p => ['created', 'analyzing'].includes(p.state));
-    if (needPolling) {
-      const timer = setInterval(() => fetchProjects(true), 3000);
-      return () => clearInterval(timer);
-    }
-  }, [list]);
 
   const filteredList = useMemo(() => {
     let result = [...list];
@@ -65,8 +63,16 @@ export default function CreateProject() {
     return result;
   }, [list, searchTerm, sortBy]);
 
+  // 🟢 核心修改 1：定义允许进入的状态白名单
+  const ALLOWED_STATES = ['characters_ready', 'script_ready', 'synthesizing', 'completed'];
+
   const handleGo = (p) => {
-    if (['created', 'analyzing'].includes(p.state)) return; 
+    // 只有在白名单内的状态才能进入
+    if (!ALLOWED_STATES.includes(p.state)) {
+      const msg = lang === 'zh-CN' ? '项目尚未就绪，请等待分析完成...' : 'Project not ready, please wait...';
+      alert(msg);
+      return;
+    }
     nav(`/project/${p.id}/workshop`);
   };
 
@@ -184,16 +190,28 @@ export default function CreateProject() {
           </div>
 
           {filteredList.map(p => {
-            const isLocked = ['created', 'analyzing'].includes(p.state);
+            // 🟢 核心修改 2：只有不在 ALLOWED_STATES 里的状态才算 Locked
+            // 这样 'characters_ready'、'script_ready'、'completed' 都是解锁的
+            const isLocked = !ALLOWED_STATES.includes(p.state);
+            
             return (
               <div 
                 key={p.id} 
                 onClick={() => handleGo(p)} 
-                className={`genshin-card dark:bg-[#2C313F] dark:border-[#4A5366] h-[280px] p-6 transition-all group flex flex-col border-2 border-[#D8CBA8] rounded-[2rem] bg-white ${isLocked ? 'opacity-70 cursor-wait' : 'cursor-pointer hover:-translate-y-2 hover:shadow-xl'}`}
+                className={`genshin-card dark:bg-[#2C313F] dark:border-[#4A5366] h-[280px] p-6 transition-all group flex flex-col border-2 border-[#D8CBA8] rounded-[2rem] bg-white 
+                  ${isLocked 
+                    ? 'opacity-80 grayscale-[0.6] cursor-not-allowed' // 锁定状态置灰
+                    : 'cursor-pointer hover:-translate-y-2 hover:shadow-xl' // 活跃状态
+                  }`}
               >
                 <div className="flex justify-between items-start mb-4">
-                   <div className="w-12 h-12 bg-[#3B4255] rounded-full flex items-center justify-center border-2 border-[#D3BC8E] text-[#D3BC8E] shadow-md group-hover:rotate-12 transition-transform">
-                     {isLocked ? <Loader2 className="animate-spin" size={24} /> : <Map size={24}/>}
+                   <div className={`w-12 h-12 rounded-full flex items-center justify-center border-2 border-[#D3BC8E] shadow-md transition-transform ${isLocked ? 'bg-gray-200 text-gray-400' : 'bg-[#3B4255] text-[#D3BC8E] group-hover:rotate-12'}`}>
+                     {/* 如果是 created/analyzing 显示加载中，其他非法状态显示锁，正常显示地图 */}
+                     {(p.state === 'created' || p.state === 'analyzing') ? (
+                       <Loader2 className="animate-spin" size={24} />
+                     ) : (
+                       isLocked ? <Lock size={20} /> : <Map size={24}/>
+                     )}
                    </div>
                    <button 
                     onClick={(e) => handleDel(e, p.id)} 
@@ -203,7 +221,7 @@ export default function CreateProject() {
                    </button>
                 </div>
                 
-                <h3 className={`font-genshin font-bold text-xl line-clamp-2 mb-3 h-14 uppercase tracking-tight ${isLocked ? 'text-gray-400' : 'text-[#3B4255] dark:text-[#ECE5D8]'}`}>
+                <h3 className={`font-genshin font-bold text-xl line-clamp-2 mb-3 h-14 uppercase tracking-tight ${isLocked ? 'text-gray-500' : 'text-[#3B4255] dark:text-[#ECE5D8]'}`}>
                   {p.name}
                 </h3>
                 
