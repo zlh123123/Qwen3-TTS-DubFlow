@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
-  ChevronRight, Trash2, RefreshCw, Plus, // 🟢 新增 Plus 图标
-  Mic, User, Play, Pause, Shield, CheckCircle2, Loader2, Hourglass 
+  ChevronRight, Trash2, RefreshCw, Plus, 
+  Mic, User, Play, Pause, Shield, CheckCircle2, Loader2, Hourglass, X 
 } from 'lucide-react';
 import { useTaskPoller } from '../hooks/useTaskPoller';
 import * as API from '../api/endpoints';
@@ -14,16 +14,35 @@ export default function Workshop() {
   const nav = useNavigate();
   const audioRef = useRef(null);
   
+  // =================状态管理=================
   const [chars, setChars] = useState([]);
   const [actID, setActID] = useState(null);
   const [loading, setLoading] = useState(true);
+  
+  // 播放状态
   const [isPlaying, setIsPlaying] = useState(false);
-  const [cooldown, setCooldown] = useState(0); // 冷却倒计时
+  const [currentTime, setCurrentTime] = useState(0); 
+  
+  // 生成冷却
+  const [cooldown, setCooldown] = useState(0); 
+
+  // 弹窗控制
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newCharForm, setNewCharForm] = useState({
+    name: '',
+    gender: '',
+    age: '',
+    description: '',
+    prompt: '',    
+    ref_text: ''   
+  });
 
   const { startPolling, loading: isRolling } = useTaskPoller();
   const actChar = chars.find(c => c.id === actID);
 
-  // 倒计时副作用
+  // =================副作用 (Effects)=================
+
+  // 1. 冷却倒计时
   useEffect(() => {
     let timer;
     if (cooldown > 0) {
@@ -32,7 +51,64 @@ export default function Workshop() {
     return () => clearTimeout(timer);
   }, [cooldown]);
 
-  // 1. 路径补全
+  // 2. 数据加载与轮询 (🟢 核心修复：防止轮询覆盖本地已有的时长)
+  const loadData = async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
+    try {
+      const res = await API.getCharacters(pid);
+      const rawList = res.data || res || []; 
+      
+      setChars(prev => {
+        // 如果是静默刷新，且数据长度一致且关键音频路径一致，则不更新状态
+        if (isSilent && prev.length === rawList.length) {
+            const hasChanged = rawList.some((newItem, index) => 
+                newItem.ref_audio_path !== prev[index].ref_audio_path || 
+                newItem.is_confirmed !== prev[index].is_confirmed
+            );
+            // 如果后端数据没变，直接返回旧数据（保留 duration）
+            if (!hasChanged) return prev;
+        }
+
+        return rawList.map(c => {
+          // 🟢 查找旧数据中对应的角色
+          const prevChar = prev.find(p => p.id === c.id);
+          
+          return {
+            ...c,
+            ref_audio_path: c.ref_audio_path || '', 
+            is_confirmed: c.is_confirmed || false,
+            // 🟢 核心修复逻辑：
+            // 如果后端传来的 c.duration 是 0 (或者不存在)，但我们本地 prevChar 有值，
+            // 那就保留本地算出来的 duration，防止被轮询清零。
+            duration: c.duration || prevChar?.duration || 0 
+          };
+        });
+      });
+
+      // 初始化选中第一个
+      if (!isSilent && rawList.length > 0 && !actID) {
+        setActID(rawList[0].id);
+      }
+    } catch (err) { console.error(err); } finally { if (!isSilent) setLoading(false); }
+  };
+
+  useEffect(() => {
+    loadData();
+    // 每 2 秒轮询一次
+    const timer = setInterval(() => loadData(true), 2000);
+    return () => clearInterval(timer);
+  }, [pid]);
+
+  // 3. 音频自动加载 (当路径变化时)
+  useEffect(() => {
+    if (audioRef.current && actChar?.ref_audio_path && !isRolling) {
+      audioRef.current.load();
+    }
+  }, [actChar?.ref_audio_path, isRolling]);
+
+  // =================辅助函数=================
+
+  // 路径补全
   const getFullAudioUrl = (path) => {
     if (!path) return null;
     if (path.startsWith('http')) return path;
@@ -45,7 +121,7 @@ export default function Workshop() {
     return `${baseURL}${path.startsWith('/') ? '' : '/'}${path}`;
   };
 
-  // 2. 头像逻辑
+  // 头像生成
   const getAvatar = (char) => {
     const name = char.name || 'Unknown';
     const gender = (char.gender || '').toLowerCase();
@@ -60,69 +136,43 @@ export default function Workshop() {
     return neutralAvatars[index % neutralAvatars.length];
   };
 
-  // 3. 数据加载
-  const loadData = async (isSilent = false) => {
-    if (!isSilent) setLoading(true);
-    try {
-      const res = await API.getCharacters(pid);
-      const rawList = res.data || res || []; 
-      setChars(prev => {
-        // 简单对比长度避免不必要的渲染，实际可做深对比
-        if (isSilent && prev.length === rawList.length && prev.every((c, i) => c.ref_audio_path === rawList[i].ref_audio_path)) {
-            return prev;
-        }
-        return rawList.map(c => ({
-          ...c,
-          ref_audio_path: c.ref_audio_path || '', 
-          is_confirmed: c.is_confirmed || false,
-          duration: c.duration || 0
-        }));
-      });
-      // 如果没有选中项且有数据，默认选中第一个
-      if (!isSilent && rawList.length > 0 && !actID) {
-        setActID(rawList[0].id);
-      }
-    } catch (err) { console.error(err); } finally { if (!isSilent) setLoading(false); }
-  };
-
-  // 始终轮询
-  useEffect(() => {
-    loadData();
-    const timer = setInterval(() => loadData(true), 2000);
-    return () => clearInterval(timer);
-  }, [pid]);
-
-  // 4. 音频加载
-  useEffect(() => {
-    if (audioRef.current && actChar?.ref_audio_path && !isRolling) {
-      audioRef.current.load();
-    }
-  }, [actChar?.ref_audio_path, isRolling]);
-
+  // 本地状态更新
   const mutate = (id, pl) => setChars(prev => prev.map(c => c.id === id ? { ...c, ...pl } : c));
   
+  // 同步到后端 (onBlur)
   const syncToBackend = async (id, field, value) => {
     try { await API.updateCharacter(id, { [field]: value }); } catch (e) { console.error(e); }
   };
 
-  // 🟢 5. 新增角色功能
-const handleAddChar = async () => {
-    if (isRolling) return; 
-    
-    // 构造新角色默认数据
-    // ⚠️ 注意：确保这里的数据类型符合后端 Pydantic (schemas/character.py) 的定义
+  // =================交互逻辑=================
+
+  const openAddModal = () => {
+    if (isRolling) return;
+    setNewCharForm({ 
+      name: '', 
+      gender: '', 
+      age: '', 
+      description: '',
+      prompt: '', 
+      ref_text: ''
+    }); 
+    setShowAddModal(true);
+  };
+
+  const confirmAddChar = async () => {
+    if (!newCharForm.name.trim()) {
+      alert(lang === 'zh-CN' ? "请输入角色名称" : "Please enter character name");
+      return;
+    }
+
     const newCharPayload = {
       project_id: pid,
-      name: lang === 'zh-CN' ? "新角色" : "New Character",
-      // 如果后端允许为空，传空字符串；如果必须有值，给个默认值
-      gender: "未知", 
-      // ⚠️ 关键点：如果后端 age 是 int 类型，这里传 "" 会报错 500 或 422
-      // 建议传 0 或者 18，或者确保后端 schemas 允许 str
-      age: "18", 
-      description: "新建立的角色...",
-      prompt: "",
-      ref_text: "",
-      // ref_audio_path 通常由后端处理默认值，或者前端传 null
+      name: newCharForm.name,
+      gender: newCharForm.gender || "未知",
+      age: newCharForm.age || "18",
+      description: newCharForm.description || "...",
+      prompt: newCharForm.prompt || "",
+      ref_text: newCharForm.ref_text || "",
       ref_audio_path: null 
     };
 
@@ -131,31 +181,29 @@ const handleAddChar = async () => {
       if (res) {
         const newCharNode = { 
             ...res, 
-            ref_audio_path: res.ref_audio_path || '', // 防止 null 导致前端报错
-            is_confirmed: false 
+            ref_audio_path: res.ref_audio_path || '', 
+            is_confirmed: false,
+            duration: 0
         };
         setChars(prev => [newCharNode, ...prev]); 
         setActID(res.id); 
         setIsPlaying(false);
+        setShowAddModal(false);
       }
     } catch (err) {
       console.error("Add failed", err);
-      // 可以在这里把 err.response.data 打印出来看具体后端报什么错
       alert("Create character failed: " + (err.message || "Server Error"));
     }
   };
-  // 🟢 6. 删除角色功能
+
   const delChar = async (e, id) => {
     e.stopPropagation();
     if (!confirm(t('del_confirm_char'))) return;
 
     try {
       await API.deleteCharacter(id);
-      
       const rest = chars.filter(c => c.id !== id);
       setChars(rest);
-      
-      // 如果删除的是当前选中的角色，自动切换到剩下列表的第一个
       if (actID === id) {
         setActID(rest.length > 0 ? rest[0].id : null);
         setIsPlaying(false);
@@ -166,7 +214,6 @@ const handleAddChar = async () => {
     }
   };
 
-  // 7. 播放控制
   const handleTogglePlay = () => {
     if (isRolling || !actChar?.ref_audio_path) return;
     const audio = audioRef.current;
@@ -187,13 +234,13 @@ const handleAddChar = async () => {
     }
   };
 
-  // 8. 生成按钮逻辑
   const handleGenerate = async () => {
     if (!actChar || isRolling || cooldown > 0) return;
 
-    setCooldown(5);
-    mutate(actID, { ref_audio_path: '' });
+    setCooldown(10); 
+    mutate(actID, { ref_audio_path: '' }); 
     setIsPlaying(false);
+    setCurrentTime(0);
 
     try {
       const res = await API.previewVoice(actChar.id);
@@ -215,7 +262,103 @@ const handleAddChar = async () => {
   if (loading) return <div className="h-screen flex items-center justify-center text-[#D3BC8E] font-bold bg-[#F0F2F5] dark:bg-[#1B1D22]">{t('loading')}</div>;
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden text-[#495366] dark:text-[#ECE5D8]">
+    <div className="h-screen flex flex-col overflow-hidden text-[#495366] dark:text-[#ECE5D8] relative">
+      
+      {/* =================弹窗 Modal================= */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-[#ECE5D8] dark:bg-[#2C313F] w-[600px] border-[3px] border-[#D3BC8E] rounded-[2rem] shadow-2xl p-8 flex flex-col gap-5 relative animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <button 
+              onClick={() => setShowAddModal(false)}
+              className="absolute top-4 right-4 text-[#A4AAB6] hover:text-[#D3BC8E] transition-colors"
+            >
+              <X size={24} />
+            </button>
+            
+            <h2 className="text-2xl font-genshin font-bold text-[#3B4255] dark:text-[#D3BC8E] text-center border-b-2 border-[#D3BC8E]/20 pb-4">
+              {lang === 'zh-CN' ? '添加新成员' : 'Add New Member'}
+            </h2>
+
+            <div className="space-y-4">
+              {/* 姓名 */}
+              <div>
+                <label className="text-xs font-bold text-[#8C7D6B] uppercase block mb-1">{t('lbl_name')}</label>
+                <input 
+                  autoFocus
+                  className="genshin-input-simple w-full bg-white/50 dark:bg-black/20" 
+                  value={newCharForm.name}
+                  onChange={e => setNewCharForm({...newCharForm, name: e.target.value})}
+                  placeholder={lang === 'zh-CN' ? "例如：旅行者" : "e.g. Traveler"}
+                />
+              </div>
+              
+              {/* 性别和年龄 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-[#8C7D6B] uppercase block mb-1">{t('lbl_gender')}</label>
+                  <input 
+                    className="genshin-input-simple w-full bg-white/50 dark:bg-black/20" 
+                    value={newCharForm.gender}
+                    onChange={e => setNewCharForm({...newCharForm, gender: e.target.value})}
+                    placeholder={lang === 'zh-CN' ? "例如：女" : "e.g. Female"}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-[#8C7D6B] uppercase block mb-1">{t('lbl_age')}</label>
+                  <input 
+                    className="genshin-input-simple w-full bg-white/50 dark:bg-black/20" 
+                    value={newCharForm.age}
+                    onChange={e => setNewCharForm({...newCharForm, age: e.target.value})}
+                    placeholder="18"
+                  />
+                </div>
+              </div>
+
+              {/* 人设描述 */}
+              <div>
+                <label className="text-xs font-bold text-[#8C7D6B] uppercase block mb-1">{t('lbl_description')}</label>
+                <textarea 
+                  className="genshin-input-simple w-full h-16 bg-white/50 dark:bg-black/20 py-2" 
+                  value={newCharForm.description}
+                  onChange={e => setNewCharForm({...newCharForm, description: e.target.value})}
+                  placeholder={lang === 'zh-CN' ? "简单的性格描述..." : "Brief description..."}
+                />
+              </div>
+
+              {/* Prompt */}
+              <div>
+                <label className="text-xs font-bold text-[#8C7D6B] uppercase block mb-1">{t('ph_prompt')}</label>
+                <textarea 
+                  className="genshin-input-simple w-full h-16 bg-white/50 dark:bg-black/20 py-2" 
+                  value={newCharForm.prompt}
+                  onChange={e => setNewCharForm({...newCharForm, prompt: e.target.value})}
+                  placeholder={lang === 'zh-CN' ? "例如：温柔、清澈、稍微带点气声..." : "e.g. Gentle, clear voice..."}
+                />
+              </div>
+
+              {/* Ref Text */}
+              <div>
+                <label className="text-xs font-bold text-[#8C7D6B] uppercase block mb-1">{t('ph_ref_text')}</label>
+                <textarea 
+                  className="genshin-input-simple w-full h-16 bg-white/50 dark:bg-black/20 py-2" 
+                  value={newCharForm.ref_text}
+                  onChange={e => setNewCharForm({...newCharForm, ref_text: e.target.value})}
+                  placeholder={lang === 'zh-CN' ? "如果不上传参考音频，请留空..." : "Leave empty if not uploading ref audio..."}
+                />
+              </div>
+            </div>
+
+            <button 
+              onClick={confirmAddChar}
+              className="genshin-btn-primary py-3 w-full text-lg font-bold mt-2"
+            >
+              {lang === 'zh-CN' ? '确认创建' : 'Create'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* =================主头部================= */}
       <header className="px-8 py-4 shrink-0 flex justify-between items-center">
         <div className="flex items-center gap-3">
           <button onClick={() => nav('/')} className="genshin-btn-circle"><ChevronRight className="rotate-180" /></button>
@@ -227,13 +370,15 @@ const handleAddChar = async () => {
         </button>
       </header>
 
+      {/* =================主内容区================= */}
       <main className="flex-1 px-8 pb-8 flex gap-8 overflow-hidden min-h-0 relative">
+        
+        {/* 左侧列表 */}
         <aside className="w-72 flex flex-col overflow-hidden shrink-0 bg-[#EBE5D9]/80 dark:bg-[#2c313f]/80 backdrop-blur rounded-[2.5rem] p-4 border-2 border-white dark:border-white/5 shadow-2xl">
           
-          {/* 🟢 新增角色按钮区 */}
           <div className="mb-4 px-2">
             <button 
-              onClick={handleAddChar}
+              onClick={openAddModal} 
               disabled={isRolling}
               className="w-full py-3 rounded-2xl border-2 border-dashed border-[#D3BC8E] text-[#D3BC8E] font-bold flex items-center justify-center gap-2 hover:bg-[#D3BC8E]/10 hover:border-solid transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -251,7 +396,6 @@ const handleAddChar = async () => {
                 <div className="flex-1 min-w-0 font-bold truncate text-sm uppercase flex items-center gap-2">
                   {c.name} {c.is_confirmed && <CheckCircle2 size={14} className="text-green-500" />}
                 </div>
-                {/* 🟢 删除按钮 */}
                 <button 
                   onClick={(e) => delChar(e, c.id)} 
                   className="opacity-0 group-hover:opacity-100 p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-all"
@@ -264,9 +408,12 @@ const handleAddChar = async () => {
           </div>
         </aside>
 
+        {/* 右侧详情 */}
         <section className="flex-1 genshin-card-flat overflow-hidden flex flex-col p-10">
           {actChar ? (
             <div className="flex-1 overflow-y-auto space-y-8 custom-scrollbar animate-in fade-in duration-300">
+              
+              {/* 1. 顶部基础信息表单 */}
               <div className="grid grid-cols-12 gap-8 bg-[#EBE5D9]/50 dark:bg-black/20 p-8 rounded-[2.5rem]">
                 <div className="col-span-2 aspect-square avatar-gradient rounded-3xl border-4 border-[#D3BC8E] flex items-center justify-center text-7xl shadow-xl">{getAvatar(actChar)}</div>
                 <div className="col-span-10 grid grid-cols-3 gap-6">
@@ -289,12 +436,14 @@ const handleAddChar = async () => {
                 </div>
               </div>
 
+              {/* 2. 底部语音调试区 */}
               <div className="bg-[#EBE5D9]/50 dark:bg-black/20 p-8 rounded-[2.5rem] space-y-6">
                 <div className="grid grid-cols-2 gap-8">
                   <textarea className="genshin-input-simple h-24 py-3" value={actChar.prompt} onChange={e => mutate(actID, {prompt: e.target.value})} onBlur={e => syncToBackend(actID, 'prompt', e.target.value)} placeholder={t('ph_prompt')} />
                   <textarea className="genshin-input-simple h-24 py-3" value={actChar.ref_text} onChange={e => mutate(actID, {ref_text: e.target.value})} onBlur={e => syncToBackend(actID, 'ref_text', e.target.value)} placeholder={t('ph_ref_text')} />
                 </div>
 
+                {/* 播放器条 */}
                 <div 
                   onClick={handleTogglePlay} 
                   className={`h-16 rounded-2xl bg-white/40 border-2 flex items-center px-6 gap-4 transition-all
@@ -305,6 +454,7 @@ const handleAddChar = async () => {
                     {isRolling ? <RefreshCw size={18} className="animate-spin" /> : (isPlaying ? <Pause size={18} fill="currentColor"/> : <Play size={18} fill="currentColor"/>)}
                   </div>
                   
+                  {/* 波形动画 */}
                   <div className="flex-1 flex items-center justify-center overflow-hidden">
                     {isRolling ? (
                       <div className="flex flex-col items-center">
@@ -325,12 +475,21 @@ const handleAddChar = async () => {
                       ) : <span className="text-xs opacity-30 font-bold uppercase tracking-widest">{t('ph_ref_text')}</span>
                     )}
                   </div>
-                  <span className="text-[10px] font-bold opacity-60 font-mono w-10 text-right">
-                    {isRolling ? '--' : (actChar.duration ? actChar.duration.toFixed(1) + 's' : '0.0s')}
+                  
+                  {/* 🟢 时间显示：修复了被轮询清零的问题 */}
+                  <span className="text-[10px] font-bold opacity-60 font-mono w-20 text-right whitespace-nowrap">
+                    {isRolling 
+                      ? '--' 
+                      : (isPlaying 
+                          ? `${currentTime.toFixed(1)}s / ${(actChar.duration || 0).toFixed(1)}s` 
+                          : `${(actChar.duration || 0).toFixed(1)}s`
+                        )
+                    }
                   </span>
                 </div>
 
                 <div className="flex gap-4">
+                  {/* 生成按钮 */}
                   <button 
                     onClick={handleGenerate} 
                     disabled={isRolling || cooldown > 0} 
@@ -345,18 +504,32 @@ const handleAddChar = async () => {
                       }
                     </span>
                   </button>
+                  {/* 确认按钮 */}
                   <button onClick={() => mutate(actID, {is_confirmed: true})} disabled={isRolling || !actChar.ref_audio_path} className={`flex-1 py-4 rounded-2xl font-bold transition-all ${actChar.is_confirmed ? 'bg-green-600 text-white' : 'bg-[#D3BC8E] text-[#3B4255] disabled:opacity-30'}`}>
                     {t('confirm')}
                   </button>
                 </div>
               </div>
               
+              {/* 🟢 修复后的 Audio 标签：自动计算时长并防止轮询覆盖 */}
               <audio 
                 ref={audioRef} 
                 src={getFullAudioUrl(actChar.ref_audio_path)} 
-                onEnded={() => setIsPlaying(false)} 
+                onEnded={() => {
+                  setIsPlaying(false);
+                  setCurrentTime(0);
+                }} 
                 onPause={() => setIsPlaying(false)}
                 onPlay={() => setIsPlaying(true)}
+                onLoadedMetadata={(e) => {
+                  const d = e.target.duration;
+                  if (d && isFinite(d)) {
+                    mutate(actID, { duration: d });
+                  }
+                }}
+                onTimeUpdate={(e) => {
+                   setCurrentTime(e.target.currentTime);
+                }}
                 onError={(e) => {
                   console.error("Audio Load Error:", e.target.error);
                   setIsPlaying(false);
