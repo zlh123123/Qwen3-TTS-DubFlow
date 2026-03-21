@@ -1,4 +1,4 @@
-# Qwen3-TTS-DubFlow
+# Narratis
 
 <div align="center">
 
@@ -7,7 +7,7 @@
 [![Node](https://img.shields.io/badge/node-22.14.0-green)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/docker-compose-green)](https://www.docker.com/)
 
-**Qwen3-TTS-DubFlow: Your AI-powered Audio Drama Studio**
+**Narratis: Your AI-powered Audio Drama Studio**
 
 [中文文档](README_zh.md)
 
@@ -15,7 +15,7 @@
 
 ## Introduction
 
-Qwen3-TTS-DubFlow is a full-stack automated workflow designed to convert text into audio dramas. It leverages Large Language Models (LLM) for character analysis and script adaptation, combined with the **Qwen3-TTS** engine for high-quality voice synthesis, helping creators quickly transform **long novels, game scripts, and comic dialogues** into multi-character audio dramas.
+Narratis is a full-stack automated workflow designed to convert text into audio dramas. It leverages Large Language Models (LLM) for character analysis and script adaptation, combined with the **Qwen3-TTS** engine for high-quality voice synthesis, helping creators quickly transform **long novels, game scripts, and comic dialogues** into multi-character audio dramas.
 
 ### Core Workflow
 Upload Novel -> AI Character Analysis -> Voice Design (Reroll) -> Script Editing -> Batch Synthesis -> Export Audio
@@ -114,7 +114,7 @@ npm run dev
 ## Project Structure
 
 ```
-Qwen3-TTS-DubFlow/
+Narratis/
 ├── frontend/                   # React Frontend Source
 │   ├── Dockerfile              # Frontend Build Image
 │   ├── nginx.conf              # Nginx Config

@@ -14,7 +14,7 @@
 # 文件树（当前实现）
 
 ```text
-Qwen3-TTS-DubFlow/
+Narratis/
 ├── frontend/
 │   └── src/
 │       ├── api/endpoints.js

@@ -6,7 +6,7 @@ const LangCtx = createContext();
 const DICT = {
   'zh-CN': {
     // 通用 (General)
-    app_title: 'DUBFLOW',
+    app_title: 'NARRATIS',
     loading: '载入中...',
     confirm: '确认',
     cancel: '取消',
@@ -98,7 +98,7 @@ const DICT = {
   },
 
   'en-US': {
-    app_title: 'DUBFLOW',
+    app_title: 'NARRATIS',
     loading: 'Loading...',
     confirm: 'Confirm',
     cancel: 'Cancel',
@@ -201,7 +201,7 @@ const DICT = {
   },
 
   'ja-JP': {
-    app_title: 'DUBFLOW',
+    app_title: 'NARRATIS',
     loading: '読み込み中...',
     confirm: '確認',
     cancel: 'キャンセル',

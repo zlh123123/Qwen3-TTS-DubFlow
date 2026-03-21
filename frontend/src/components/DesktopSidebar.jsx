@@ -52,11 +52,11 @@ export default function DesktopSidebar({ onOpenSettings }) {
     <aside className="fixed left-0 top-0 z-40 h-screen w-[92px] border-r border-white/30 bg-gradient-to-b from-white/65 via-white/45 to-white/35 backdrop-blur-xl">
       <div className="flex h-full flex-col items-center py-4">
         <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#1f2937] text-[#d3bc8e] shadow-[0_10px_24px_rgba(31,41,55,0.28)]">
-          <span className="text-sm font-black tracking-tight">DF</span>
+          <span className="text-sm font-black tracking-tight">NA</span>
         </div>
 
         <div className="mb-4 flex flex-col items-center text-[10px] text-[#64748b]">
-          <span className="font-bold tracking-wide">DubFlow</span>
+          <span className="font-bold tracking-wide">Narratis</span>
           <span className="opacity-80">Desktop</span>
         </div>
 

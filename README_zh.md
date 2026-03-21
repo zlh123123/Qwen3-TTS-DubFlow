@@ -1,4 +1,4 @@
-# Qwen3-TTS-DubFlow
+# Narratis
 
 <div align="center">
 
@@ -7,7 +7,7 @@
 [![Node](https://img.shields.io/badge/node-22.14.0-green)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/docker-compose-green)](https://www.docker.com/)
 
-**Qwen3-TTS-DubFlow：你的 AI 广播剧自动化工坊**
+**Narratis：你的 AI 广播剧自动化工坊**
 
 [English](README.md)
 
@@ -15,7 +15,7 @@
 
 ## 项目介绍
 
-Qwen3-TTS-DubFlow 是一个全栈式的广播剧自动化制作工作流。它利用大语言模型（LLM）进行深入的角色分析和剧本改编，并结合 Qwen3-TTS 引擎进行高质量的语音合成，帮助创作者将长篇小说、游戏剧本、漫画对话等创作题材快速转化为多人有声剧。
+Narratis 是一个全栈式的广播剧自动化制作工作流。它利用大语言模型（LLM）进行深入的角色分析和剧本改编，并结合 Qwen3-TTS 引擎进行高质量的语音合成，帮助创作者将长篇小说、游戏剧本、漫画对话等创作题材快速转化为多人有声剧。
 
 ### 核心流程
 上传小说 -> AI 角色分析 -> 音色铸造 (Reroll) -> 剧本演播室 -> 批量合成 -> 导出音频
@@ -115,7 +115,7 @@ npm run dev
 ## 目录结构
 
 ```
-Qwen3-TTS-DubFlow/
+Narratis/
 ├── frontend/                   # [前端] React 项目目录
 │   ├── Dockerfile              # 前端构建镜像
 │   ├── nginx.conf              # Nginx 配置

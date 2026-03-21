@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Qwen3 TTS DubFlow",
+  "productName": "Narratis",
   "version": "0.1.0",
-  "identifier": "com.dubflow.desktop",
+  "identifier": "com.narratis.desktop",
   "build": {
     "beforeDevCommand": "npm run dev -- --host 127.0.0.1 --port 1420 --strictPort",
     "devUrl": "http://127.0.0.1:1420",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Qwen3 TTS DubFlow",
+        "title": "Narratis",
         "width": 1220,
         "height": 820,
         "minWidth": 1080,

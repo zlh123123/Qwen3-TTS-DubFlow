@@ -49,7 +49,7 @@ app.include_router(assets.router)
 
 @app.get("/")
 def read_root():
-    return {"message": "Qwen3-DubFlow Backend is running!"}
+    return {"message": "Narratis Backend is running!"}
 
 if __name__ == "__main__":
     import uvicorn

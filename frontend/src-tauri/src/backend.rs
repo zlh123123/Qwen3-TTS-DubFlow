@@ -29,7 +29,7 @@ pub fn spawn_backend_sidecar() -> Option<Child> {
     let backend_path = backend_dir();
     if !backend_path.exists() {
         eprintln!(
-            "[dubflow-sidecar] backend path not found: {}",
+            "[narratis-sidecar] backend path not found: {}",
             backend_path.to_string_lossy()
         );
         return None;
@@ -44,11 +44,11 @@ pub fn spawn_backend_sidecar() -> Option<Child> {
             .spawn();
 
         if let Ok(process) = child {
-            println!("[dubflow-sidecar] backend started by {}", bin);
+            println!("[narratis-sidecar] backend started by {}", bin);
             return Some(process);
         }
     }
 
-    eprintln!("[dubflow-sidecar] failed to spawn backend sidecar");
+    eprintln!("[narratis-sidecar] failed to spawn backend sidecar");
     None
 }

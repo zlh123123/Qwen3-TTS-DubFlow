@@ -1,21 +1,34 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Plus, Trash2, Clock, Map, Compass, 
-  Sparkles, ChevronRight, Search, ArrowUpDown, Loader2, Lock 
+import {
+  Plus,
+  Trash2,
+  Clock,
+  Sparkles,
+  ChevronRight,
+  Search,
+  ArrowUpDown,
+  Loader2,
+  Lock,
+  FolderOpen,
+  Gauge,
+  Activity
 } from 'lucide-react';
 import * as API from '../api/endpoints';
 import CreateProjectModal from '../components/CreateProjectModal';
 import { useLang } from '../contexts/LanguageContext';
 
+const ALLOWED_STATES = ['characters_ready', 'script_ready', 'synthesizing', 'completed'];
+const PROCESSING_STATES = ['created', 'analyzing', 'analyzing_characters', 'synthesizing'];
+
 export default function CreateProject() {
-  const { t, lang } = useLang(); 
+  const { t, lang } = useLang();
   const nav = useNavigate();
-  
+  const isZh = lang === 'zh-CN';
+
   const [list, setList] = useState([]);
   const [showNew, setShowNew] = useState(false);
   const [loading, setLoading] = useState(true);
-
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('newest');
 
@@ -24,25 +37,20 @@ export default function CreateProject() {
     try {
       const res = await API.getProjects();
       const items = res?.items || (Array.isArray(res) ? res : []);
-      
-      setList(prev => {
+      setList((prev) => {
         if (isSilent && items.length === 0 && prev.length > 0) return prev;
         return items;
       });
     } catch (err) {
-      console.error("Load Projects Failed:", err);
+      console.error('Load Projects Failed:', err);
     } finally {
       if (!isSilent) setLoading(false);
     }
   };
 
-  // 始终轮询逻辑
   useEffect(() => {
     fetchProjects();
-    const timer = setInterval(() => {
-      fetchProjects(true);
-    }, 2000);
-    console.log("Started global polling for project status...");
+    const timer = setInterval(() => fetchProjects(true), 2000);
     return () => clearInterval(timer);
   }, []);
 
@@ -50,7 +58,7 @@ export default function CreateProject() {
     let result = [...list];
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
-      result = result.filter(p => p.name?.toLowerCase().includes(term));
+      result = result.filter((p) => p.name?.toLowerCase().includes(term));
     }
     result.sort((a, b) => {
       if (sortBy === 'newest') return new Date(b.created_at) - new Date(a.created_at);
@@ -61,14 +69,30 @@ export default function CreateProject() {
     return result;
   }, [list, searchTerm, sortBy]);
 
-  // 🟢 核心修改 1：定义允许进入的状态白名单
-  const ALLOWED_STATES = ['characters_ready', 'script_ready', 'synthesizing', 'completed'];
+  const summary = useMemo(() => {
+    const total = list.length;
+    const ready = list.filter((p) => ALLOWED_STATES.includes(p.state)).length;
+    const processing = list.filter((p) => PROCESSING_STATES.includes(p.state)).length;
+    return { total, ready, processing };
+  }, [list]);
+
+  const formatTime = (input) => {
+    if (!input) return '---';
+    return new Date(input)
+      .toLocaleString(lang === 'zh-CN' ? 'zh-CN' : 'en-GB', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      })
+      .replace(/\//g, '-');
+  };
 
   const handleGo = (p) => {
-    // 只有在白名单内的状态才能进入
     if (!ALLOWED_STATES.includes(p.state)) {
-      const msg = lang === 'zh-CN' ? '项目尚未就绪，请等待分析完成...' : 'Project not ready, please wait...';
-      alert(msg);
+      window.alert(isZh ? '项目尚未就绪，请等待分析完成。' : 'Project is not ready yet. Please wait.');
       return;
     }
     nav(`/project/${p.id}/workshop`);
@@ -77,28 +101,28 @@ export default function CreateProject() {
   const handleDel = async (e, pid) => {
     e.stopPropagation();
     if (!window.confirm(t('del_confirm'))) return;
-    
-    setList(prev => prev.filter(item => item.id !== pid));
-    try { 
-      await API.deleteProject(pid); 
-    } catch (err) { 
-      fetchProjects(true); 
+
+    setList((prev) => prev.filter((item) => item.id !== pid));
+    try {
+      await API.deleteProject(pid);
+    } catch (err) {
+      fetchProjects(true);
     }
   };
 
   const StatusTag = ({ s }) => {
     const map = {
-      'created': { text: t('status_created'), cls: 'text-gray-500 bg-gray-100 border-gray-200' },
-      'analyzing': { text: t('status_analyzing'), cls: 'text-blue-500 bg-blue-50 border-blue-200 animate-pulse' },
-      'analyzing_characters': { text: t('status_analyzing'), cls: 'text-blue-500 bg-blue-50 border-blue-200 animate-pulse' },
-      'characters_ready': { text: t('status_characters_ready'), cls: 'text-cyan-600 bg-cyan-50 border-cyan-200' },
-      'script_ready': { text: t('status_script_ready'), cls: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
-      'synthesizing': { text: t('status_synthesizing'), cls: 'text-purple-600 bg-purple-50 border-purple-200' },
-      'completed': { text: t('status_completed'), cls: 'text-[#9A7D48] bg-[#F5EBDA] border-[#D3BC8E]' },
+      created: { text: t('status_created'), cls: 'text-slate-500 bg-slate-100 border-slate-200' },
+      analyzing: { text: t('status_analyzing'), cls: 'text-blue-600 bg-blue-50 border-blue-200 animate-pulse' },
+      analyzing_characters: { text: t('status_analyzing'), cls: 'text-blue-600 bg-blue-50 border-blue-200 animate-pulse' },
+      characters_ready: { text: t('status_characters_ready'), cls: 'text-cyan-700 bg-cyan-50 border-cyan-200' },
+      script_ready: { text: t('status_script_ready'), cls: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
+      synthesizing: { text: t('status_synthesizing'), cls: 'text-violet-700 bg-violet-50 border-violet-200' },
+      completed: { text: t('status_completed'), cls: 'text-amber-700 bg-amber-50 border-amber-200' }
     };
-    const config = map[s] || { text: s, cls: 'text-gray-400 bg-gray-50 border-gray-200' };
+    const config = map[s] || { text: s, cls: 'text-slate-500 bg-slate-50 border-slate-200' };
     return (
-      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${config.cls}`}>
+      <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-wide ${config.cls}`}>
         {config.text}
       </span>
     );
@@ -106,143 +130,161 @@ export default function CreateProject() {
 
   if (loading) {
     return (
-      <div className="h-screen flex items-center justify-center text-[#D3BC8E] bg-[#F0F2F5] dark:bg-[#1B1D22] font-bold tracking-widest animate-pulse">
-        {t('loading')}
+      <div className="flex h-screen items-center justify-center bg-transparent text-slate-600">
+        <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-5 py-3 shadow-sm">
+          <Loader2 className="animate-spin" size={18} />
+          <span className="text-sm font-semibold">{t('loading')}</span>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen pb-20 bg-[#F0F2F5] dark:bg-[#1B1D22] transition-colors duration-300">
-      <CreateProjectModal 
-        open={showNew} 
-        close={() => setShowNew(false)} 
-        onCreated={(newP) => setList(prev => [newP, ...prev])} 
+    <div className="min-h-screen bg-transparent pb-12">
+      <CreateProjectModal
+        open={showNew}
+        close={() => setShowNew(false)}
+        onCreated={(newP) => setList((prev) => [newP, ...prev])}
       />
 
-      <header className="relative mt-6 mx-auto max-w-7xl px-6 z-20">
-        <div className="paimon-menu px-6 py-3 flex justify-between items-center border-2 border-[#D8CBA8] bg-white/90 dark:bg-[#12141A]/90 rounded-2xl shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#ECE5D8] rounded-full flex items-center justify-center border-2 border-[#D3BC8E] shadow-[0_0_10px_#D3BC8E]">
-              <Compass className="text-[#3B4255]" size={24}/>
-            </div>
+      <main className="mx-auto max-w-6xl px-7 pb-10 pt-8">
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
             <div>
-              <h1 className="font-genshin font-bold text-xl text-[#D3BC8E] tracking-widest leading-tight">{t('app_title')}</h1>
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                <Sparkles size={13} />
+                {t('app_title')}
+              </div>
+              <h1 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">{t('quest_log')}</h1>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t('quest_sub')}</p>
             </div>
-          </div>
-        </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto px-8 py-10">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
-          <div className="flex items-center gap-4">
-              <div className="h-8 w-1.5 bg-[#D3BC8E] rounded-full shadow-sm"></div>
-              <h2 className="text-3xl font-genshin font-bold text-[#495366] dark:text-[#ECE5D8] flex items-baseline gap-3">
-                {t('quest_log')} <span className="text-lg text-[#A4AAB6] font-sans font-normal italic">{t('quest_sub')}</span>
-              </h2>
+            <button
+              onClick={() => setShowNew(true)}
+              className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
+            >
+              <Plus size={16} />
+              {t('new_quest')}
+            </button>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="relative group">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#D3BC8E]" size={18} />
-              <input 
-                type="text" 
-                placeholder={t('search_ph')} 
-                value={searchTerm} 
-                onChange={(e) => setSearchTerm(e.target.value)} 
-                className="pl-11 pr-4 py-2.5 w-64 bg-white/80 dark:bg-[#2C313F] border-2 border-[#D8CBA8] rounded-full outline-none focus:border-[#D3BC8E] transition-all text-sm font-bold shadow-sm" 
+          <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+            <SummaryCard icon={<FolderOpen size={15} />} title={isZh ? '全部项目' : 'All Projects'} value={summary.total} />
+            <SummaryCard icon={<Gauge size={15} />} title={isZh ? '可编辑' : 'Ready'} value={summary.ready} />
+            <SummaryCard icon={<Activity size={15} />} title={isZh ? '处理中' : 'In Progress'} value={summary.processing} />
+          </div>
+        </section>
+
+        <section className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <div className="flex flex-col gap-3 border-b border-slate-200 p-4 md:flex-row md:items-center md:justify-between dark:border-slate-700">
+            <div className="relative w-full max-w-md">
+              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <input
+                type="text"
+                placeholder={t('search_ph')}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-4 text-sm text-slate-700 outline-none transition focus:border-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
               />
             </div>
-            <div className="relative flex items-center">
-              <select 
-                value={sortBy} 
-                onChange={(e) => setSortBy(e.target.value)} 
-                className="appearance-none pl-5 pr-12 py-2.5 bg-[#3B4255] border-2 border-[#D3BC8E] text-[#ECE5D8] rounded-full text-xs font-bold outline-none cursor-pointer"
+            <div className="relative">
+              <ArrowUpDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="appearance-none rounded-lg border border-slate-200 bg-slate-50 py-2.5 pl-3 pr-9 text-sm font-medium text-slate-700 outline-none transition focus:border-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
               >
-                <option value="newest">{t('sort_new')}</option> 
-                <option value="oldest">{t('sort_old')}</option> 
-                <option value="name">{t('sort_name')}</option>   
+                <option value="newest">{t('sort_new')}</option>
+                <option value="oldest">{t('sort_old')}</option>
+                <option value="name">{t('sort_name')}</option>
               </select>
-              <ArrowUpDown className="absolute right-4 text-[#D3BC8E] pointer-events-none" size={14} />
             </div>
           </div>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-          <div 
-            onClick={() => setShowNew(true)} 
-            className="group h-[280px] border-4 border-dashed border-[#D8CBA8] bg-[#F7F3EB]/50 dark:bg-white/5 hover:bg-[#F7F3EB] dark:hover:bg-white/10 rounded-[2rem] flex flex-col items-center justify-center cursor-pointer transition-all hover:-translate-y-2 relative"
-          >
-              <div className="w-20 h-20 bg-gradient-to-b from-[#F2EBDC] to-[#D3BC8E] rounded-full flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform">
-                <Plus size={40} className="text-[#3B4255]" strokeWidth={3} />
-              </div>
-              <span className="font-genshin font-bold text-[#8C7D6B] dark:text-[#D3BC8E] text-xl tracking-tighter">{t('new_quest')}</span>
-              <Sparkles className="absolute top-6 right-6 text-[#D3BC8E]/40" size={24}/>
+          <div className="hidden grid-cols-[2fr_1fr_1.3fr_88px] gap-3 border-b border-slate-200 bg-slate-50 px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+            <span>{isZh ? '项目' : 'Project'}</span>
+            <span>{isZh ? '状态' : 'Status'}</span>
+            <span>{isZh ? '创建时间' : 'Created At'}</span>
+            <span className="text-right">{isZh ? '操作' : 'Action'}</span>
           </div>
 
-          {filteredList.map(p => {
-            // 🟢 核心修改 2：只有不在 ALLOWED_STATES 里的状态才算 Locked
-            // 这样 'characters_ready'、'script_ready'、'completed' 都是解锁的
-            const isLocked = !ALLOWED_STATES.includes(p.state);
-            
-            return (
-              <div 
-                key={p.id} 
-                onClick={() => handleGo(p)} 
-                className={`genshin-card dark:bg-[#2C313F] dark:border-[#4A5366] h-[280px] p-6 transition-all group flex flex-col border-2 border-[#D8CBA8] rounded-[2rem] bg-white 
-                  ${isLocked 
-                    ? 'opacity-80 grayscale-[0.6] cursor-not-allowed' // 锁定状态置灰
-                    : 'cursor-pointer hover:-translate-y-2 hover:shadow-xl' // 活跃状态
-                  }`}
-              >
-                <div className="flex justify-between items-start mb-4">
-                   <div className={`w-12 h-12 rounded-full flex items-center justify-center border-2 border-[#D3BC8E] shadow-md transition-transform ${isLocked ? 'bg-gray-200 text-gray-400' : 'bg-[#3B4255] text-[#D3BC8E] group-hover:rotate-12'}`}>
-                     {/* 如果是 created/analyzing 显示加载中，其他非法状态显示锁，正常显示地图 */}
-                     {(p.state === 'created' || p.state === 'analyzing' || p.state === 'analyzing_characters') ? (
-                       <Loader2 className="animate-spin" size={24} />
-                     ) : (
-                       isLocked ? <Lock size={20} /> : <Map size={24}/>
-                     )}
-                   </div>
-                   <button 
-                    onClick={(e) => handleDel(e, p.id)} 
-                    className="w-8 h-8 rounded-full hover:bg-red-50 dark:hover:bg-red-900/30 text-[#A4AAB6] hover:text-red-500 flex items-center justify-center transition-colors"
-                   >
-                     <Trash2 size={18}/>
-                   </button>
-                </div>
-                
-                <h3 className={`font-genshin font-bold text-xl line-clamp-2 mb-3 h-14 uppercase tracking-tight ${isLocked ? 'text-gray-500' : 'text-[#3B4255] dark:text-[#ECE5D8]'}`}>
-                  {p.name}
-                </h3>
-                
-                <div className="mb-auto">
-                  <StatusTag s={p.state} />
-                </div>
-                
-                <div className="flex items-center justify-between mt-4 pt-4 border-t-2 border-[#D8CBA8]/20 text-[#8C7D6B] font-bold">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <Clock size={14} className="text-[#D3BC8E] shrink-0"/>
-                    <span className="truncate text-[10px]">
-                      {p.created_at ? (
-                        new Date(p.created_at).toLocaleString(lang === 'zh-CN' ? 'zh-CN' : 'en-GB', {
-                          year: 'numeric',
-                          month: '2-digit',
-                          day: '2-digit',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          hour12: false
-                        }).replace(/\//g, '-') 
-                      ) : '---'}
-                    </span>
-                  </div>
-                  {!isLocked && <ChevronRight size={14} className="text-[#D3BC8E] transition-transform group-hover:translate-x-1"/>}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+          {filteredList.length > 0 && (
+            <div className="divide-y divide-slate-200 dark:divide-slate-700">
+              {filteredList.map((p) => {
+                const isLocked = !ALLOWED_STATES.includes(p.state);
+                const isBusy = p.state === 'created' || p.state === 'analyzing' || p.state === 'analyzing_characters';
+                return (
+                  <article
+                    key={p.id}
+                    onClick={() => handleGo(p)}
+                    className={`grid cursor-pointer gap-3 px-5 py-4 transition md:grid-cols-[2fr_1fr_1.3fr_88px] md:items-center ${
+                      isLocked
+                        ? 'bg-white text-slate-500 hover:bg-slate-50/80 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/80'
+                        : 'bg-white text-slate-800 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <h3 className="truncate text-[15px] font-semibold">{p.name}</h3>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        {isLocked
+                          ? isZh
+                            ? '处理中，暂不可进入编辑'
+                            : 'Processing, editing is temporarily unavailable'
+                          : isZh
+                            ? '可进入角色工坊继续编辑'
+                            : 'Ready to continue in Workshop'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <StatusTag s={p.state} />
+                    </div>
+
+                    <div className="inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                      <Clock size={13} />
+                      {formatTime(p.created_at)}
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2">
+                      {isBusy ? <Loader2 size={14} className="animate-spin text-blue-500" /> : isLocked ? <Lock size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-500" />}
+                      <button
+                        onClick={(e) => handleDel(e, p.id)}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+
+          {filteredList.length === 0 && (
+            <div className="flex min-h-[220px] items-center justify-center p-6 text-center text-sm text-slate-500 dark:text-slate-400">
+              {searchTerm.trim()
+                ? isZh
+                  ? '没有匹配的项目，试试更短的关键词。'
+                  : 'No matching projects. Try a shorter keyword.'
+                : isZh
+                  ? '还没有项目，先创建第一个项目。'
+                  : 'No projects yet. Create your first one.'}
+            </div>
+          )}
+        </section>
       </main>
+    </div>
+  );
+}
+
+function SummaryCard({ icon, title, value }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
+      <div className="mb-2 inline-flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-300">
+        <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-200">{icon}</span>
+        {title}
+      </div>
+      <div className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">{value}</div>
     </div>
   );
 }

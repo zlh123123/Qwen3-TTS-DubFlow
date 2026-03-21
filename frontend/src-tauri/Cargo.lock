@@ -666,14 +666,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dubflow_desktop"
-version = "0.1.0"
-dependencies = [
- "tauri",
- "tauri-build",
-]
-
-[[package]]
 name = "dunce"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1842,6 +1834,14 @@ dependencies = [
  "serde",
  "thiserror 2.0.18",
  "windows-sys 0.60.2",
+]
+
+[[package]]
+name = "narratis_desktop"
+version = "0.1.0"
+dependencies = [
+ "tauri",
+ "tauri-build",
 ]
 
 [[package]]
