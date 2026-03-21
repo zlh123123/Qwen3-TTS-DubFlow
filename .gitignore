@@ -1,5 +1,12 @@
 models_deploy/model/*
 backend/storage/*
+.DS_Store
+**/.DS_Store
+
+# Tauri / Rust build artifacts
+frontend/src-tauri/target/
+frontend/src-tauri/gen/
+frontend/src-tauri/.cargo/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

@@ -2,8 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from database import get_db
-from models.character import Character
-from models.task import Task
+from database import Character, Task
 from schemas.character import CharacterResponse, CharacterUpdate, CharacterCreate
 import uuid
 

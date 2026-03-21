@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  Settings, Plus, Trash2, Clock, Map, Compass, 
+  Plus, Trash2, Clock, Map, Compass, 
   Sparkles, ChevronRight, Search, ArrowUpDown, Loader2, Lock 
 } from 'lucide-react';
 import * as API from '../api/endpoints';
-import SettingsModal from '../components/SettingsModal';
 import CreateProjectModal from '../components/CreateProjectModal';
 import { useLang } from '../contexts/LanguageContext';
 
@@ -14,7 +13,6 @@ export default function CreateProject() {
   const nav = useNavigate();
   
   const [list, setList] = useState([]);
-  const [showSet, setShowSet] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -92,6 +90,7 @@ export default function CreateProject() {
     const map = {
       'created': { text: t('status_created'), cls: 'text-gray-500 bg-gray-100 border-gray-200' },
       'analyzing': { text: t('status_analyzing'), cls: 'text-blue-500 bg-blue-50 border-blue-200 animate-pulse' },
+      'analyzing_characters': { text: t('status_analyzing'), cls: 'text-blue-500 bg-blue-50 border-blue-200 animate-pulse' },
       'characters_ready': { text: t('status_characters_ready'), cls: 'text-cyan-600 bg-cyan-50 border-cyan-200' },
       'script_ready': { text: t('status_script_ready'), cls: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
       'synthesizing': { text: t('status_synthesizing'), cls: 'text-purple-600 bg-purple-50 border-purple-200' },
@@ -115,8 +114,6 @@ export default function CreateProject() {
 
   return (
     <div className="min-h-screen pb-20 bg-[#F0F2F5] dark:bg-[#1B1D22] transition-colors duration-300">
-      <SettingsModal open={showSet} close={() => setShowSet(false)} />
-      
       <CreateProjectModal 
         open={showNew} 
         close={() => setShowNew(false)} 
@@ -133,12 +130,6 @@ export default function CreateProject() {
               <h1 className="font-genshin font-bold text-xl text-[#D3BC8E] tracking-widest leading-tight">{t('app_title')}</h1>
             </div>
           </div>
-          <button 
-            onClick={() => setShowSet(true)} 
-            className="w-10 h-10 rounded-full bg-[#3B4255] border-2 border-[#6A7080] hover:border-[#D3BC8E] flex items-center justify-center text-[#ECE5D8] shadow-md transition-all active:scale-90"
-          >
-            <Settings size={20} />
-          </button>
         </div>
       </header>
 
@@ -207,7 +198,7 @@ export default function CreateProject() {
                 <div className="flex justify-between items-start mb-4">
                    <div className={`w-12 h-12 rounded-full flex items-center justify-center border-2 border-[#D3BC8E] shadow-md transition-transform ${isLocked ? 'bg-gray-200 text-gray-400' : 'bg-[#3B4255] text-[#D3BC8E] group-hover:rotate-12'}`}>
                      {/* 如果是 created/analyzing 显示加载中，其他非法状态显示锁，正常显示地图 */}
-                     {(p.state === 'created' || p.state === 'analyzing') ? (
+                     {(p.state === 'created' || p.state === 'analyzing' || p.state === 'analyzing_characters') ? (
                        <Loader2 className="animate-spin" size={24} />
                      ) : (
                        isLocked ? <Lock size={20} /> : <Map size={24}/>

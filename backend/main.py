@@ -1,9 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from database import engine, Base, SessionLocal
-from routers import projects, config, characters, tasks
+from database import SessionLocal
+from database.init_db import init_database
+from routers import projects, config, characters, tasks, assets
 from utils.init_config import init_settings 
-from models import project, config as config_model 
 from workers.worker import start_worker
 from contextlib import asynccontextmanager
 import os
@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 os.makedirs("storage", exist_ok=True)
 
 # 自动创建表结构
-Base.metadata.create_all(bind=engine)
+init_database()
 
 # 第一次运行软件时，初始化配置项
 db = SessionLocal()
@@ -45,6 +45,7 @@ app.include_router(projects.router)
 app.include_router(config.router) 
 app.include_router(characters.router)
 app.include_router(tasks.router)
+app.include_router(assets.router)
 
 @app.get("/")
 def read_root():

@@ -1,693 +1,441 @@
 # 概述
-核心流程：用户上传小说 -> LLM 分析角色 -> 用户确认/调整人设与声线 -> LLM 切分剧本 -> 批量/单句合成语音 -> 导出音频。
+
+核心流程：用户上传小说 -> LLM 分析角色 -> 用户调整角色并生成/导入参考音 -> 进入演播室做台词与音频资产管理 -> 逐句/批量合成（脚本与合成接口待补齐）。
+
 技术栈：
-+ 前端：React
-+ 后端：FastAPI + Celery + Redis + SQLite
-+ AI：vLLM （推理Qwen3-TTS）
 
-# 文件树
-
-```
-
-# 文件树
-
-Qwen3-DubFlow/
-├── .env                        # [全局配置] 根目录环境变量 (供 docker-compose 读取，如 PROJECT_NAME, GPU_IDS)
-├── docker-compose.yml          # [核心编排] 定义所有服务 (Frontend, Backend, Redis, Celery, TTS-Design, TTS-Base)
-├── README.md                   # 项目说明文档
-│
-├── frontend/                   # [前端服务] React + Nginx
-│   ├── Dockerfile              # [构建] 多阶段构建: Node编译 -> Nginx服务
-│   ├── nginx.conf              # [配置] Nginx 反向代理配置 (转发 /api 到 backend, 转发 /static 到 storage)
-│   ├── package.json            # [依赖] Node 依赖
-│   ├── public/                 # [资源] 静态资源
-│   └── src/                    # [源码]
-│       ├── api/                # [API] axios 封装 (projects.js, tasks.js)
-│       ├── hooks/              # [Hooks] 自定义 Hooks (useTaskPoller.js)
-│       ├── pages/              # [页面] (CreateProject, CharacterWorkshop, Studio)
-│       ├── components/         # [组件] 公共组件
-│       ├── App.js              # 根组件
-│       └── index.js            # 入口文件
-│
-├── backend/                    # [后端服务] FastAPI + Celery
-│   ├── Dockerfile              # [构建] Python 环境构建 (安装 uv, 依赖)
-│   ├── entrypoint.sh           # [启动] 启动脚本 (判断是启动 Web 还是 Celery Worker)
-│   ├── .env                    # [局部配置] 后端专用环境变量 (DB_URL, REDIS_URL)
-│   ├── pyproject.toml          # [依赖] uv 依赖管理
-│   ├── uv.lock                 # [依赖] 锁定文件
-│   │
-│   ├── main.py                 # [入口] FastAPI App 初始化
-│   ├── database.py             # [数据库] SessionLocal, Base
-│   ├── celery_app.py           # [队列] Celery 实例配置
-│   ├── tasks.py                # [任务] 具体的异步任务逻辑 (调用 TTS API)
-│   │
-│   ├── models/                 # [ORM] 数据库表模型
-│   │   ├── project.py          # Project 表定义
-│   │   ├── character.py        # Character 表定义
-│   │   └── script.py           # ScriptLine 表定义
-│   │
-│   ├── schemas/                # [Pydantic] 数据校验模型
-│   │   ├── project.py          # ProjectCreate, ProjectResponse
-│   │   ├── character.py        # CharacterUpdate
-│   │   └── common.py           # TaskResponse
-│   │
-│   ├── routers/                # [路由] API 接口实现
-│   │   ├── projects.py         # /api/projects
-│   │   ├── characters.py       # /api/characters
-│   │   ├── scripts.py          # /api/script
-│   │   ├── synthesis.py        # /api/synthesis
-│   │   └── tasks.py            # /api/tasks
-│   │
-│   └── utils/                  # [工具]
-│       ├── llm_helper.py       # LLM 调用封装
-│       └── audio_helper.py     # 音频处理工具
-│
-├── models_deploy/              # [AI模型服务] 独立的推理环境 (GPU)
-│   ├── Dockerfile              # [构建] 统一的推理镜像 (PyTorch + vLLM + 依赖)
-│   ├── requirements.txt        # [依赖] 推理服务所需的 Python 包
-│   ├── entrypoint.sh           # [启动] 容器启动脚本 (根据环境变量 TASK_TYPE 启动不同模型)
-│   │
-│   ├── vllm_omni/              # [引擎] vllm-omni 源码 (Git Submodule)
-│   │   ├── model_executor/     # 模型执行逻辑
-│   │   └── ...                 # 其他源码文件
-│   │
-│   └── models/                 # [权重] 模型文件挂载目录 (宿主机下载好后映射进容器)
-│       ├── Qwen3-TTS-12Hz-1.7B-VoiceDesign/  # 捏人模型权重
-│       └── Qwen3-TTS-12Hz-1.7B-Base/         # 基础模型权重
-│
-└── storage/                    # [持久化存储] 挂载到后端和 Nginx 容器
-    ├── uploads/                # 原始小说文件
-    ├── temp/                   # 临时音频 (Reroll用)
-    └── projects/               # 项目数据
-        └── {project_id}/       # 按项目隔离
-            ├── voices/         # 确认的角色参考音 (Ref Audio)
-            └── outputs/        # 最终合成音频
-
-```
-
-# 前端功能
-
-+ 用户打开前端页面时显示的第一个界面，提供一个文本输入框和一个文件输入的选项。文本输入框可以统计字数等；文件输入用户可以点击后选择本地路径的文件，或者将文件拖拽进去。v1版本仅支持小说。v1版本中仅支持单文件，且仅支持txt文件。
-+ 第二个界面，仅显示角色列和对角色的修改控件。用户点击每个角色的卡片，即可在修改控件中修改由LLM生成的角色描述与需要合成的参考音频的文本，点击reroll后即可提交TTS任务。此处需要支持用户进行角色的增删。当用户确认所有角色的参考音频ok，可以通过点击按钮进到下一步
-+ 第三个界面，显示角色列、对话列和控件列。用户点击角色卡片，可以在控件中看到角色描述、参考音频文本（可显示为灰底代表无法修改），并可听参考音频。用户点击对话卡片，可以在控件中修改需要合成的对话内容以及修改语速等，点击reroll后即可提交TTS任务。此外需要支持用户进行对话的增删。这里还可能存在对话与人物不对应的错误情况，在控件中需要提供修改策略。
-+ 第三个界面需要有批量合成选项，同时也包括根据筛选条件批量合成的功能（即仅合成某个人物，不合成旁白等，可以通过多选框的形式构建）；批量导出在v1版不提供，批量合成会将音频保存至本地默认位置；还需要提供设置按钮，包括1、用户选择的文本LLM的类型（Qwen or Deepseek or 自己本地部署或其他模型）与API key，2、用户选择的TTS模型的提供方式（本地部署 or Autodl部署后穿透 or 调用阿里云API），v1版仅提供本地部署即可，3、一些外观功能（可视情况，v1版也可不提供），4、开源协议与版权说明
-
-## 页面 1: 项目仪表盘
-
-顶部导航栏：Qwen3-DubFlow Logo | 设置按钮 (GitHub, API Key配置)
-
-主体内容区：
-
-+ 新建卡片 (Big Button)：一个显眼的“+ 新建项目”大卡片。
-+ 项目列表 (Grid/List)：按时间倒序排列的卡片。这里也可以加入各种筛选显示的逻辑
-
-项目卡片内容：
-
-+ 标题：《斗破苍穹第一章》
-+ 状态标签：🔵 角色分析中 / 🟢 待合成 / ✅ 已完成，所有的标签见上面的数据库
-+ 进度条：(仅在 synthesizing 状态下显示) 例如 "35/100 句"
-+ 时间：创建于 2026-02-02
-+ 操作：继续编辑、删除项目
+- 前端：React
+- 后端：FastAPI + SQLite
+- 任务执行：后端内置 Worker 线程（非 Celery）
+- TTS：`autodl` / `local_vllm` / `aliyun`（当前已接入角色试听链路）
 
 ---
 
-**交互逻辑：**
+# 文件树（当前实现）
 
-新建项目：
-
-点击“+”号 -> 弹出一个 Modal (对话框) 或者跳转到一个 简单的 Form 页面。
-
-*此页面就是原来的页面1，不过建议做成悬浮的小窗样式*
-
-提交后：回到列表页，列表中多了一个 created 状态的卡片。
-
-进入项目 (智能路由)：
-
-用户点击卡片。
-
-前端根据 state 判断跳转哪里：
-
-+ created / analyzing_characters / characters_ready -> 跳转 Page 2 (角色工坊)
-+ parsing_script / script_ready / synthesizing / completed -> 跳转 Page 3 (演播室)
-
-## 页面 2: 角色工坊 
-
-功能目标：确认由 LLM 分析出的角色设定，并定妆音色。
-
-UI 布局：
-
-+ 左侧：角色列表卡片（显示头像/名字）。
-+ 右侧：编辑控件。
-
-交互逻辑：
-
-+ 初始化：进入页面自动触发 Analyze Characters 异步任务，显示 Loading，完成后渲染列表。
-+ 角色编辑：点击角色卡片，右侧显示：
-
-```
-姓名 
-
-性别
-
-年龄
-
-人设描述/Prompt (Text Area, 由 LLM 生成，可修改)
-
-参考文本 (Text Area, 用于生成音色的台词，可修改)
+```text
+Qwen3-TTS-DubFlow/
+├── frontend/
+│   └── src/
+│       ├── api/endpoints.js
+│       ├── pages/CreateProject.jsx
+│       ├── pages/Workshop.jsx
+│       └── pages/Studio.jsx
+│
+├── backend/
+│   ├── main.py
+│   ├── config.py
+│   ├── database/
+│   │   ├── database.py       # SQLite 连接 + 全部 ORM 模型
+│   │   └── init_db.py        # 建表脚本
+│   ├── routers/
+│   │   ├── projects.py
+│   │   ├── characters.py
+│   │   ├── tasks.py
+│   │   ├── config.py
+│   │   └── assets.py         # character-ref/effect/bgm 资产接口
+│   ├── workers/
+│   │   ├── worker.py
+│   │   ├── analyze_characters.py
+│   │   └── synthesis_voicedesign.py
+│   └── storage/
+│       ├── database.db
+│       ├── temp/
+│       └── projects/{project_id}/...
 ```
 
-+ 音色试听 (Reroll)：点击“试听/生成”按钮 -> 触发 TTS 任务 -> 播放临时音频。如果不满意，修改 Prompt 或参考文本后再次点击。
-+ 确认音色：点击“确认使用” -> 将当前试听的音频锁定为该角色的 ref_audio。
-+ 增删角色：列表底部提供“添加角色”按钮；卡片右上角提供“删除”按钮。
-+ 下一步：当用户确认所有关键角色后，点击“生成剧本”跳转至页面 3。
+---
 
-## 页面 3: 演播室 
+# 前端功能（产品视角）
 
-功能目标：精修台词，指派角色，合成最终音频。
+## 页面 1：项目仪表盘
 
-UI 布局：三栏式布局
+- 新建项目（TXT 内容汇总）
+- 列表查看项目状态
+- 根据状态进入角色工坊
 
-+ 左栏 (角色库)：显示所有可用角色（方便拖拽或查看）。
-+ 中栏 (剧本流)：垂直滚动的对话卡片流。
-+ 右栏 (控制台)：当前选中台词的详细参数。
+## 页面 2：角色工坊
 
-交互逻辑：
+- 角色增删改
+- 角色试听（异步任务）
+- 角色音色确认（可回退，字段变更后要求重确认）
 
-+ 初始化：进入页面自动触发 Parse Script 异步任务。
-+ 剧本卡片：每张卡片代表一句台词，显示 角色头像 + 台词文本。
-+ 修改文本：直接点击文本编辑。
-+ 修改角色：发现 LLM 分配错误时，点击头像从下拉框重新指派角色。
-+ 单句合成：点击卡片上的“播放/重试”按钮，单独合成这一句。
-+ 控制台 (右栏)：选中某句台词时，可修改该句的 语速 等参数。
-+ 此外，还需要提供台词增删功能
+## 页面 3：演播室（UI 已有，后端脚本/合成接口待补齐）
 
-批量操作：
+- 台词流编辑（前端有对应调用）
+- 单句/批量合成按钮（后端接口暂未实现）
+- 时间轨（规划中）：支持类似 Premiere Pro 的多轨排布（人声轨 / BGM 轨 / 环境音轨 / 音效轨）、片段拖拽、对齐吸附、裁剪、淡入淡出和音量包络
+- 时间轨不在当前迭代实现，仅先在产品与 API 设计中占位
 
-+ 筛选合成：Checkbox 勾选“仅合成未完成的”、“仅合成主角”、“不用合成旁白”等，反正全都能选。
-+ 全部合成：点击“批量合成” -> 触发后台队列。
+## 设置
 
-## 设置弹窗 
+- LLM / TTS / 外观配置读写
 
-LLM 设置：选择模型 (Qwen/Deepseek/本地部署)、填写 API Key。
+---
 
-TTS 设置：选择后端 (Local/Cloud)、显卡指定。（这个v1版不需要）
+# 桌面版左侧导航建议（你当前需求）
 
-# 数据库设计
+你提到的“打包桌面应用左侧到底有什么选项、逻辑怎么走”，建议固定为 5 个一级入口：
 
-用户可以创建多个Project。在v1版下，即一个project对应一个小说的配音任务。其数据库构成为：
+1. 项目（Projects）
+- 新建/打开项目
+
+2. 角色与音色（Characters）
+- 角色编辑
+- 音色设计（生成）
+- 角色参考音导入（导入）
+- 已确认参考音管理
+
+3. 资产库（Assets）
+- Effect（环境音/音效）
+- BGM
+- 资产标签、试听、删除
+
+4. 演播室（Studio）
+- 台词、角色映射、批量合成
+
+5. 设置（Settings）
+- 模型服务、下载状态、日志、API Key
+
+结论：音色设计功能属于“角色与音色”主流程，不放在通用资产库里；资产库主要存可复用音频（Effect/BGM），角色参考音走单独表和单独入口。
+
+---
+
+# 数据库设计（当前重构方案）
+
+> 已按你要求拆分，不再使用单一 `media_assets` 通用表。
+
+## Project
 
 | 字段名 | 类型 | 说明 |
-| :--- | :--- | :--- |
-| id | String (UUID) | 主键 |
-| name | String | 项目名称 (通常是小说名，用户可以自定义) |
-| raw_content | Text | 小说原始文本 |
+|---|---|---|
+| id | String(UUID) | 主键 |
+| name | String | 项目名称 |
+| language | String | 语言 |
+| raw_content | Text | 原文 |
 | created_at | DateTime | 创建时间 |
-| state | String | 当前状态，可能的所有状态如下 |
+| state | String | 状态机字段 |
 
-| 状态值 (State) | 中文含义 | 前端行为逻辑 | 触发条件 |
-| :--- | :--- | :--- | :--- |
-| **created** | 已创建/待处理 | 显示在列表，点击进入“上传页”或“角色页”。 | 项目刚 insert 到数据库，未进行任何 AI 操作。 |
-| **analyzing_characters** | 角色分析中 | 列表页显示 Loading 动画；禁止进入详情页。 | 用户点击“分析角色”按钮，Worker 开始跑 LLM。 |
-| **characters_ready** | 角色待确认 | 点击进入“角色工坊 (Page 2)”。 | LLM 分析完成，Character 表有数据了。 |
-| **parsing_script** | 剧本切分中 | 列表页显示 Loading；禁止操作。 | 用户在 Page 2 点击“生成剧本”，Worker 开始跑 LLM。 |
-| **script_ready** | 剧本就绪/待合成 | 点击进入“演播室 (Page 3)”。 | 剧本切分完成，ScriptLine 表有数据了。 |
-| **synthesizing** | 合成进行中 | 列表页显示进度条；Page 3 锁定批量合成按钮。 | 用户点击了“批量合成”，后台正在疯狂跑 GPU。 |
-| **completed** | 已完成 | 列表页显示“完成”角标；Page 3 允许导出。 | 所有的 ScriptLine status 都变成了 synthesized。 |
-| **failed** | 处理失败 | 列表页显示红色警告，允许用户“重试”。 | 任何一个异步任务 (Celery) 抛出异常 (如显存溢出、LLM 超时)。 |
+## Character
 
-
-每个Project中包含一张角色表和对话表。其构成为：
-
-角色表：
-Character (角色表)
 | 字段名 | 类型 | 说明 |
-| :--- | :--- | :--- |
-| id | Integer | 主键 |
-| project_id | String (FK) | 外键关联 Project |
-| name | String | 角色名 (如: 萧炎) |
-| gender | String | male/female/还有那种虚拟的未知的 |
-| age | String | 可以是数字，也可以是大致的描述，例如中年人 |
-| description | Text | 人设描述 (用于 LLM 指令) |
-| prompt | Text | 音色提示词 (Timbre Prompt) |
-| ref_audio_path | String | 定妆音频路径 (用户确认后的 wav 路径) |
-| duration | Float | 音频时长(秒)|
-| ref_text | String | 生成定妆音频时用的那句话 |
+|---|---|---|
+| id | String(UUID) | 主键 |
+| project_id | String(FK) | 关联 Project（CASCADE） |
+| name | String | 角色名 |
+| gender | String | 性别 |
+| age | String | 年龄/描述 |
+| description | Text | 人设描述 |
+| prompt | Text | 音色提示 |
+| is_confirmed | Boolean | 是否确认 |
+| ref_audio_path | String | 当前确认参考音 |
+| duration | Float | 时长 |
+| ref_text | String | 参考文本 |
 
+## CharacterRefAsset（角色参考音资产）
 
-对话表：
-
-ScriptLine
 | 字段名 | 类型 | 说明 |
-| :--- | :--- | :--- |
-| id | Integer | 主键 |
-| project_id | String (FK) | 外键关联 Project |
-| character_id | Integer (FK)| 外键关联 Character |
-| order_index | Integer | 台词顺序 (1, 2, 3...) |
-| text | Text | 台词内容 |
-| speed | Float | 语速 |
-| audio_path | String | 合成后的音频路径 (未合成为 Null) |
-| duration | Float | 音频时长(秒)|
-| status | String | pending / synthesized / failed |
+|---|---|---|
+| id | String(UUID) | 主键 |
+| project_id | String(FK) | 关联 Project（CASCADE） |
+| character_id | String(FK) | 关联 Character（SET NULL） |
+| source_type | String | `imported` / `generated` / `voice_design` |
+| display_name | String | 显示名 |
+| file_path | String | 文件路径 |
+| file_format | String | 文件格式 |
+| file_size | Integer | 文件大小 |
+| duration | Float | 时长 |
+| sample_rate | Integer | 采样率 |
+| channels | Integer | 声道数 |
+| managed_file | Boolean | 是否托管 |
+| note | Text | 备注 |
+| created_at | DateTime | 创建时间 |
+| character_name_snapshot | String | 导入时角色名快照 |
+| character_gender_snapshot | String | 导入时性别快照 |
+| character_age_snapshot | String | 导入时年龄快照 |
+| character_description_snapshot | Text | 导入时人设快照 |
+| character_prompt_snapshot | Text | 导入时音色提示快照 |
+| character_ref_text_snapshot | Text | 导入时参考文本快照 |
 
+## EffectAsset（环境音/音效）
 
-每个用户还有一张配置表。其配置为：
+| 字段名 | 类型 | 说明 |
+|---|---|---|
+| id | String(UUID) | 主键 |
+| project_id | String(FK) | 关联 Project（CASCADE） |
+| source_type | String | `imported` / `generated` |
+| effect_category | String | `ambience` / `effect` |
+| display_name | String | 显示名 |
+| file_path | String | 文件路径 |
+| file_format | String | 文件格式 |
+| file_size | Integer | 文件大小 |
+| duration | Float | 时长 |
+| sample_rate | Integer | 采样率 |
+| channels | Integer | 声道数 |
+| managed_file | Boolean | 是否托管 |
+| note | Text | 备注 |
+| created_at | DateTime | 创建时间 |
 
-Config
-| 字段名 | 类型 | 说明 | 示例值 |
-| :--- | :--- | :--- | :--- |
-| **key** | String (PK) | 唯一键名 (建议用点分法) | `llm.deepseek.api_key` |
-| **value** | Text | 配置值 (不论什么类型都转字符串存) | `sk-123456` |
-| **group** | String | 分组 (用于前端 Tab 切换) | `llm_settings` |
-| **label** | String | 前端显示的中文名称 | `DeepSeek API Key` |
-| **type** | String |  控件类型 | `password` / `text` / `select` / `boolean` / `color` |
-| **options** | JSON | 如果是 select，这里存选项 | `["deepseek", "qwen", "openai"]` |
-| **default** | String | 默认值 | `deepseek` |
-| **is_public** | Boolean | 是否公开 (部分配置可能不给前端看) | `true` |
+## BgmAsset
 
-A. appearance (外观与交互)
+| 字段名 | 类型 | 说明 |
+|---|---|---|
+| id | String(UUID) | 主键 |
+| project_id | String(FK) | 关联 Project（CASCADE） |
+| source_type | String | `imported` / `generated` |
+| display_name | String | 显示名 |
+| file_path | String | 文件路径 |
+| file_format | String | 文件格式 |
+| file_size | Integer | 文件大小 |
+| duration | Float | 时长 |
+| sample_rate | Integer | 采样率 |
+| channels | Integer | 声道数 |
+| bpm | Float | BPM（可选） |
+| mood | String | 情绪标签（可选） |
+| managed_file | Boolean | 是否托管 |
+| note | Text | 备注 |
+| created_at | DateTime | 创建时间 |
 
-| Key | Label | Type | Options / Default | 说明 |
-| :--- | :--- | :--- | :--- | :--- |
-| `app.theme_mode` | 主题模式 | `select` | `["light", "dark", "system"]` | 明亮/暗黑/跟随系统 |
-| `app.primary_color` | 主题色 | `color` | `#1677ff` | 品牌主色调 |
-| `app.language` | 语言 | `select` | `["zh-CN", "en-US"]` | 国际化支持 |
-| `app.font_size` | 字体大小 | `select` | `["small", "medium", "large"]` | 针对视力不好的用户 |
+## Task
 
-B. llm_settings (LLM设置)
+| 字段名 | 类型 | 说明 |
+|---|---|---|
+| id | String(UUID) | 主键 |
+| project_id | String(FK) | 关联 Project（CASCADE） |
+| type | String | `analyze_char` / `synthesis_voicedesign` |
+| status | String | `pending` / `processing` / `success` / `failed` |
+| payload | JSON | 入参 |
+| result | JSON | 结果 |
+| error_msg | Text | 错误 |
+| created_at | DateTime | 创建时间 |
 
-| Key | Label | Type | Default | 说明 |
-| :--- | :--- | :--- | :--- | :--- |
-| `llm.active_provider` | 当前 LLM 服务商 | `select` | `deepseek` | 下拉选 DeepSeek/Qwen/Local |
-| `llm.deepseek.api_key` | DeepSeek API Key | `password` | - | 存密钥，前端显示为 ****** |
-| `llm.qwen.api_key` | Qwen API Key | `password` | - | 存密钥，前端显示为 ****** |
-| `llm.local.url` | 本地 LLM 地址 | `text` | `http://localhost:11434` | Ollama 等本地服务地址 |
+## Config
 
-C. tts_settings (语音合成设置)
+| 字段名 | 类型 | 说明 |
+|---|---|---|
+| key | String(PK) | 唯一键 |
+| value | Text | 配置值 |
+| group | String | 配置分组 |
+| label | String | 显示文案 |
+| type | String | 控件类型 |
+| options | JSON | 选项 |
+| default | String | 默认值 |
+| is_public | Boolean | 是否对前端可见 |
 
-| Key | Label | Type | Default | 说明 |
-| :--- | :--- | :--- | :--- | :--- |
-| `tts.active_backend` | TTS 后端类型 | `select` | `local_docker` | Local / Remote(AutoDL) / Aliyun |
-| `tts.local.url` | 本地服务地址 | `text` | `http://tts-base:8000` | Docker 内部地址 |
-| `tts.remote.url` | 远程服务地址 | `text` | - | AutoDL 的公网穿透地址 |
-| `tts.remote.token` | 远程鉴权 Token | `password` | - | 防止被白嫖的简单的密码，这个需要确认autodl里真有这东西？ |
-| `tts.aliyun.app_key` | 阿里云 AppKey | `text` | - | 第三方接口必填 |
-| `tts.aliyun.token` | 阿里云 Token | `password` | - | 第三方接口必填 |
+---
 
-D. synthesis_config (合成策略与高级参数)
+# API 文档（当前实现）
 
-| Key | Label | Type | Default | 说明 |
-| :--- | :--- | :--- | :--- | :--- |
-| **基础设置** | | | | |
-| `syn.default_speed` | 默认语速 | `number` | `1.0` | 建议范围 0.8 - 1.5 比较自然。 |
-| `syn.silence_duration` | 句间静音时长 | `number` | `0.5` | 单位：秒。合成长音频时，每句话之间插入的空白停顿。 |
-| `syn.export_path` | 默认导出路径 | `text` | `/data/outputs` | 容器内路径，需挂载对应宿主机 storage 目录。 |
-| `syn.max_workers` | 最大并发数 | `number` | `2` | 限制同时合成任务数。防止显存溢出 (OOM) 的关键。 |
-| **音频处理** | | | | |
-| `syn.volume_gain` | 音量增益 | `number` | `1.0` | 1.0 为原声。针对声音偏小的模型可设为 1.2 或 1.5。 |
-| `syn.audio_format` | 音频导出格式 | `select` | `wav` | `["wav", "mp3"]`。wav 无损，mp3 体积小。 |
-| **文本预处理** | | | | |
-| `syn.auto_slice` | 自动切分过长文本 | `boolean` | `true` | 开启后防止单句超过模型字符限制导致报错。 |
-| `syn.text_clean` | 文本清洗 | `boolean` | `true` | 自动去除无法朗读的特殊符号（如 ✨, ---, [] 等）。 |
+## 页面 1：项目仪表盘
 
+### 创建项目
+- `POST /api/projects`
 
-除了用户配置表外，项目后端运行还需要一些配置，这些配置放在.env环境变量中，仅开发人员使用，普通用户不使用
+### 获取项目列表
+- `GET /api/projects`
+- 返回数组（不是 `{total, items}`）
 
-+ .env中包括数据库地址、Redis 端口、密钥这些。由开发/运维人员管理，代码运行前就必须存在，一旦修改通常需要重启服务。
-+ UserConfig则由用户在前端 UI 修改，实时生效，不需要重启服务。
+### 获取项目详情
+- `GET /api/projects/{project_id}`
 
-# API文档
+### 删除项目
+- `DELETE /api/projects/{project_id}`
+- 会删除数据库记录和 `storage/projects/{project_id}` 目录
 
-**所有请求体 (Request Body) 和响应体 (Response Body) 均为 JSON；耗时任务（如分析、合成）均采用 异步模式 (返回 task_id)。**
+### 触发角色分析（异步）
+- `POST /api/projects/{project_id}/characters/analyze`
+- 返回：`{ "task_id": "..." }`
 
-## 页面 1: 项目仪表盘
+---
 
-#### 创建项目
+## 页面 2：角色工坊
 
-URL: POST /api/projects
+### 获取角色列表
+- `GET /api/projects/{project_id}/characters`
 
-Request:
+### 新建角色
+- `POST /api/characters/`
 
-```
+### 更新角色
+- `PUT /api/characters/{character_id}`
+- 支持：`name/gender/age/description/prompt/ref_text/is_confirmed/ref_audio_path/duration`
+
+### 删除角色
+- `DELETE /api/characters/{character_id}`
+
+### 试听生成（异步）
+- `POST /api/characters/{character_id}/voice`
+- 当前实现：不接 body，直接读取角色当前字段
+- 返回：`{ "task_id": "..." }`
+
+---
+
+## 资产库：角色参考音 / 环境音 / BGM
+
+### Character Ref Assets
+
+- `GET /api/projects/{project_id}/character-refs`
+- `POST /api/projects/{project_id}/character-refs/import`
+- `PUT /api/character-refs/{asset_id}`
+- `DELETE /api/character-refs/{asset_id}`
+
+导入请求示例：
+
+```json
 {
-  "name": "斗破苍穹第一章",
-  "content": "这里是小说全文内容..."
+  "source_path": "/Users/xxx/Desktop/ref.wav",
+  "character_id": "char_uuid",
+  "display_name": "萧炎-参考音1",
+  "copy_to_project": true,
+  "source_type": "imported",
+  "note": "第一版"
 }
 ```
 
-Response:
-```
-{ "id": "uuid-gen-001", "name": "...", "created_at": "..." }
-```
+### Effect Assets
 
-#### 获取所有的project
+- `GET /api/projects/{project_id}/effects`
+- `POST /api/projects/{project_id}/effects/import`
+- `PUT /api/effects/{asset_id}`
+- `DELETE /api/effects/{asset_id}`
 
-URL: GET /api/projects
+导入请求示例：
 
-Response：
-
-```
+```json
 {
-  "total": 5,
-  "items": [
+  "source_path": "/Users/xxx/Desktop/rain.wav",
+  "effect_category": "ambience",
+  "display_name": "雨声",
+  "copy_to_project": true
+}
+```
+
+### BGM Assets
+
+- `GET /api/projects/{project_id}/bgms`
+- `POST /api/projects/{project_id}/bgms/import`
+- `PUT /api/bgms/{asset_id}`
+- `DELETE /api/bgms/{asset_id}`
+
+导入请求示例：
+
+```json
+{
+  "source_path": "/Users/xxx/Desktop/intro.mp3",
+  "display_name": "片头BGM",
+  "bpm": 110,
+  "mood": "warm",
+  "copy_to_project": true
+}
+```
+
+---
+
+## Studio 时间轨（规划接口，占位）
+
+> 以下接口为“规划接口”，当前后端尚未实现，仅用于先确定 API 契约。
+
+### 获取时间轨工程
+
+- `GET /api/projects/{project_id}/timeline`
+
+响应示例：
+
+```json
+{
+  "project_id": "pid",
+  "fps": 30,
+  "sample_rate": 48000,
+  "duration_sec": 120.0,
+  "tracks": [
+    { "id": "track_voice_1", "type": "voice", "name": "角色对白", "locked": false, "muted": false },
+    { "id": "track_bgm_1", "type": "bgm", "name": "BGM", "locked": false, "muted": false },
+    { "id": "track_amb_1", "type": "ambience", "name": "环境音", "locked": false, "muted": false }
+  ],
+  "clips": [
     {
-      "id": "uuid-001",
-      "name": "斗破苍穹",
-      "state": "synthesizing",
-      "progress": { "finished": 50, "total": 100 }, // 可选，方便前端展示
-      "created_at": "2026-02-02T10:00:00"
-    },
-    {
-      "id": "uuid-002",
-      "name": "凡人修仙传",
-      "state": "characters_ready",
-      "created_at": "2026-02-01T14:20:00"
+      "id": "clip_001",
+      "track_id": "track_voice_1",
+      "asset_type": "line_audio",
+      "asset_id": "line_5001",
+      "start_sec": 12.4,
+      "duration_sec": 3.2,
+      "offset_sec": 0.0,
+      "gain": 1.0,
+      "fade_in_sec": 0.05,
+      "fade_out_sec": 0.12
     }
   ]
 }
 ```
 
-#### 获取单个project的详情
+### 保存时间轨工程
 
-URL: GET /api/projects/{pid}
+- `PUT /api/projects/{project_id}/timeline`
 
-Response：
+请求体：完整 timeline 对象（建议整包保存，避免并发冲突）
 
-```
-{
-  "id": "uuid-001",
-  "name": "斗破苍穹",
-  "state": "script_ready", // 前端根据这个字段决定路由
-  "raw_content_preview": "这里是小说前100字..."
-}
-```
+### 导出时间轨混音
 
-#### 删除项目
+- `POST /api/projects/{project_id}/timeline/render`
 
-URL: DELETE /api/projects/{pid}
+响应示例：
 
-后端不仅要删数据库里的记录，还要级联删除磁盘上 storage/projects/{pid}/ 下的所有音频文件
-
-## 页面 2: 角色工坊
-
-#### 调用LLM角色分析 (异步)
-
-URL: POST /api/projects/{pid}/characters/analyze
-传参为需要分析的project的id，触发 LLM 阅读小说并提取角色。
-Response: { "task_id": "task_char_001" }
-
-#### 获取角色列表
-
-URL: GET /api/projects/{pid}/characters
-Response:
-```
-[
-  {
-    "id": 101,
-    "name": "萧炎",
-    "gender": "male",
-    "age":"18岁",
-    "description": "坚毅的少年...",
-    "ref_text": "三十年河东，三十年河西！",
-    "ref_audio_url": "/static/voices/101_confirmed.wav" // 若未定妆则为 null
-  }
-]
+```json
+{ "task_id": "task_timeline_render_001" }
 ```
 
-#### 修改角色信息
+---
 
-URL: PUT /api/characters/{char_id}
+## 设置页
 
-Request:
-```
-{
-  "name": "萧炎(修改版)",
- "gender": "male",
-    "age":"18岁",
-  "description": "声音更加低沉...",
-  "ref_text": "莫欺少年穷！"
-}
-```
+### 获取配置
+- `GET /api/settings`
 
-#### 音色试听/Reroll (异步)
+### 更新配置
+- `PUT /api/settings`
 
-URL: POST /api/voices/preview
+请求示例：
 
-根据当前参数生成一个临时音频，**不保存到数据库**。
-
-Request:
-```
-{
-  "character_id": 101,
-  "text": "莫欺少年穷！", // 试听文本
-  "instruct": "声音低沉，充满怒火" // 提示词
-}
-```
-
-Response: { "task_id": "task_preview_001" }
-
-前端轮询该任务成功后，会拿到一个临时 URL ( /static/temp/preview_xyz.wav这种)
-
-#### 确认音色
-
-URL: POST /api/characters/{char_id}/confirm_voice
-
-用户对某次试听满意，将该临时文件固化为角色的参考音频。
-
-Request:
-```
-{
-  "temp_audio_task_id": "task_preview_001" // 指明是哪一次生成的结果
-}
-```
-
-## 页面 3: 演播室 
-
-#### 触发剧本切分 (异步)
-
-URL: POST /api/projects/{pid}/script/parse
-
-LLM 将原文切分为对话列表。
-
-Response: { "task_id": "task_script_001" }
-
-#### 获取剧本详情
-
-URL: GET /api/projects/{pid}/script
-
-Response:
-```
-[
-  {
-    "id": 5001,
-    "character_id": 101,
-    "character_name": "萧炎", // 冗余字段方便前端展示
-    "text": "老师，我们走吧。",
-    "audio_url": null,
-    "status": "pending"
-  },
-  {
-    "id": 5002,
-    "character_id": 102, // 药老
-    "text": "好，小家伙。",
-    "audio_url": "/static/outputs/line_5002.wav",
-    "status": "synthesized"
-  }
-]
-```
-
-#### 修改单句台词
-
-URL: PUT /api/script/{line_id}
-
-Request:
-```
-{
-  "character_id": 103, // 修改说话人
-  "text": "老师，等等！" // 修改文本
-}
-```
-
-#### 提交合成任务 (异步 - 批量或单句)
-
-URL: POST /api/synthesis
-
-Request:
-```
-{
-  "project_id": "uuid-gen-001",
-  "line_ids": [5001, 5003] // 传入要合成的台词ID列表。如果是单句试听，列表里就放一个ID。
-}
-```
-
-Response: { "task_id": "task_syn_batch_001" }
-
-## 系统配置页
-
-#### 获取配置
-
-URL: GET /api/settings
-
-Response (按照 Group 分组返回):
-```
-{
-  "appearance": [
-    {
-      "key": "app.theme_mode",
-      "value": "light",
-      "label": "主题模式",
-      "type": "select",
-      "options": ["light", "dark", "system"],
-      "default": "system"
-    }
-  ],
-  "llm_settings": [
-    {
-      "key": "llm.active_provider",
-      "value": "deepseek",
-      "label": "当前 LLM 服务商",
-      "type": "select",
-      "options": ["deepseek", "qwen", "local"]
-    },
-    {
-      "key": "llm.deepseek.api_key",
-      "value": "sk-******", // 注意：后端应脱敏返回
-      "label": "DeepSeek API Key",
-      "type": "password"
-    }
-  ],
-  "tts_settings": [
-    {
-      "key": "tts.active_backend",
-      "value": "local_docker",
-      "label": "TTS 后端类型",
-      "type": "select",
-      "options": ["local_docker", "remote_autodl", "aliyun"]
-    }
-  ],
-  "synthesis_config": [
-    {
-      "key": "syn.silence_duration",
-      "value": "0.5",
-      "label": "句间静音时长",
-      "type": "number",
-      "default": "0.5"
-    }
-  ]
-}
-```
-#### 更新配置
-
-URL: PUT /api/settings
-前端只传修改了的 KV 对。
-
-Request: 
-
-```
+```json
 {
   "updates": [
-    { "key": "llm.active_provider", "value": "local" },
-    { "key": "llm.local.url", "value": "http://localhost:11434" }
+    { "key": "llm.active_provider", "value": "deepseek" },
+    { "key": "tts.backend", "value": "aliyun" }
   ]
 }
 ```
+
+---
 
 ## 通用轮询接口
 
-用来查询这里所有异步任务进行的状态
+### 查询异步任务
+- `GET /api/tasks/{task_id}`
 
-URL: GET /api/tasks/{task_id}
-
-状态定义:
-
-+ pending: 排队中 (任务已提交到队列，Worker 尚未接单)
-+ processing: 处理中 (AI 正在推理)
-+ success: 成功 (处理完成，返回结果)
-+ failed: 失败 (代码报错或资源不足)
-
-Response (Pending - 排队中):
-```
-{ 
-  "status": "pending",
-  "position": 3 // (可选) 当前队列排队位置
-}
-```
-
-
-Response (Processing - 处理中):
-```
-//分析/剧本任务/单句TTS任务：没有进度
-{
-  "status": "processing",
-}
-// 批量合成任务，返回进度
-{
-  "status": "processing",
-  "progress": {
-    "current": 15,
-    "total": 50,
-    "percent": 30
-  }
-}
-
-```
-
-
-Response (Success - 成功):
-```
-{
-  "status": "success",
-  "result": { 
-    // 成功结果：如果是TTS任务，返回的就是wav的URL
-    "audio_url": "/static/temp/preview_xyz.wav" 
-    // 分析/剧本任务：通常返回简单的 {"message": "ok"}，提示前端去刷新列表接口
-  }
-}
-```
-
-
-Response (Failed - 失败):
-```
-{
-  "status": "failed",
-  "error": "GPU Out of Memory" // 错误原因，供前端 Toast 提示
-}
-```
-
-# 未来更新内容
-+ LLM分析角色特征：当小说非常长时（大于100w字），支持切分处理
-+ LLM切分剧本：支持多线程切分加速
-+ 对话合成中添加环境音功能
-+ 两个对话之间支持控制静音片段时间长短
-+ 输入文件类型支持多样化
-+ 合成的东西更多，包括不限于游戏、播客、试题听力、漫画等
-+ TTS模型支持autodl穿透与阿里云API接入
-+ 用户在每次reroll后都可能觉得之前的更好，加入历史记录更难
-+ 添加批量导出/打包功能，导出zip这种
-+ 对合成音频支持音量控制
-+ 引入类似剪辑软件的波形编辑器，用户可通过拖拽音频块实现整段音频的编辑
-+ 提供字幕文件导出功能
+状态：
+- `pending`
+- `processing`
+- `success`
+- `failed`
 
 ---
 
-书面版本：
+# 当前缺口（未实现接口）
 
-**核心算法与性能**
+- `GET /api/projects/{project_id}/script`
+- `POST /api/projects/{project_id}/script/parse`
+- `PUT /api/script/{line_id}`
+- `POST /api/synthesis`
 
-+ 超长文本分析：优化上下文管理，支持百万字级长篇小说的分段增量分析。
-+ 并行切分加速：引入多线程机制，大幅提升 LLM 剧本切分效率。
-+ 异构后端接入：支持 AutoDL 穿透部署及阿里云等第三方 TTS API 接入。
+以上前端已有调用，后端路由仍待补。
 
-**音频编辑与增强**
+---
 
-+ 环境音效集成：支持对话背景音 (BGM) 及环境音效 (SFX) 的自动/手动添加。
-+ 精细化节奏控制：支持自定义句间静音时长 (Silence Duration) 与呼吸感调整。
-+ 动态音量调节：支持单句及全局的音频增益/响度控制 (Gain/Loudness Control)。
-+ 可视化波形编辑：引入非线性编辑 (NLE) 轨道视图，支持拖拽调整时间轴与音频块剪辑。
+# 未来更新内容（建议）
 
-**工作流与交互体验**
-
-+ 多格式文件支持：扩展输入格式，支持 EPUB, PDF, DOCX 等文档导入。
-+ 多场景合成模版：新增游戏语音、播客 (Podcast)、听力试题、动态漫画等专用预设。
-+ Reroll 历史回溯：保留生成历史记录，支持版本对比与一键回退 (Undo/Redo)。
-+ 批量打包导出：支持按章节/角色归档，一键导出 ZIP 压缩包。
-+ 字幕同步导出：基于音频时间戳，自动生成 SRT/ASS 字幕文件。
+- 脚本切分与合成接口补齐
+- 资产库标签/搜索/去重
+- 角色参考音历史版本与回滚
+- 任务取消与失败恢复
+- 批量导出（zip）与工程打包

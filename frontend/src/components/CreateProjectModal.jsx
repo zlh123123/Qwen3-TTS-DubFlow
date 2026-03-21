@@ -61,7 +61,7 @@ export default function CreateProjectModal({ open, close, onCreated }) {
         console.log('角色分析任务ID:', analyzeResponse.task_id);
 
         // 更新项目状态为 analyzing
-        d.state = 'analyzing';
+        d.state = 'analyzing_characters';
 
         onCreated(d);
         handleClose();

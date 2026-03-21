@@ -2,9 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from database import get_db
-from models.project import Project
-from models.task import Task
-from models.character import Character
+from database import Project, Task, Character, ScriptLine, CharacterRefAsset, EffectAsset, BgmAsset
 from schemas.project import ProjectCreate, ProjectResponse
 from schemas.character import CharacterResponse
 import shutil
@@ -82,8 +80,16 @@ def delete_project(project_id: str, db: Session = Depends(get_db)):
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    
-    # 删数据库
+
+    # 历史数据库可能没开外键级联，这里显式清理子表，避免孤儿数据
+    db.query(Task).filter(Task.project_id == project_id).delete(synchronize_session=False)
+    db.query(ScriptLine).filter(ScriptLine.project_id == project_id).delete(synchronize_session=False)
+    db.query(CharacterRefAsset).filter(CharacterRefAsset.project_id == project_id).delete(synchronize_session=False)
+    db.query(EffectAsset).filter(EffectAsset.project_id == project_id).delete(synchronize_session=False)
+    db.query(BgmAsset).filter(BgmAsset.project_id == project_id).delete(synchronize_session=False)
+    db.query(Character).filter(Character.project_id == project_id).delete(synchronize_session=False)
+
+    # 删项目主记录
     db.delete(project)
     db.commit()
     

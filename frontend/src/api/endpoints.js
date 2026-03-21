@@ -101,7 +101,59 @@ export const getTaskStatus = async (taskId) => {
 };
 
 // ==========================================
-// 5. 系统设置 (Settings)
+// 5. 音频资产库 (CharacterRef / Effect / BGM)
+// ==========================================
+
+export const getCharacterRefs = async (pid) => {
+  return client.get(`/projects/${pid}/character-refs`);
+};
+
+export const importCharacterRef = async (pid, data) => {
+  return client.post(`/projects/${pid}/character-refs/import`, data);
+};
+
+export const updateCharacterRef = async (assetId, data) => {
+  return client.put(`/character-refs/${assetId}`, data);
+};
+
+export const deleteCharacterRef = async (assetId) => {
+  return client.delete(`/character-refs/${assetId}`);
+};
+
+export const getEffects = async (pid) => {
+  return client.get(`/projects/${pid}/effects`);
+};
+
+export const importEffect = async (pid, data) => {
+  return client.post(`/projects/${pid}/effects/import`, data);
+};
+
+export const updateEffect = async (assetId, data) => {
+  return client.put(`/effects/${assetId}`, data);
+};
+
+export const deleteEffect = async (assetId) => {
+  return client.delete(`/effects/${assetId}`);
+};
+
+export const getBgms = async (pid) => {
+  return client.get(`/projects/${pid}/bgms`);
+};
+
+export const importBgm = async (pid, data) => {
+  return client.post(`/projects/${pid}/bgms/import`, data);
+};
+
+export const updateBgm = async (assetId, data) => {
+  return client.put(`/bgms/${assetId}`, data);
+};
+
+export const deleteBgm = async (assetId) => {
+  return client.delete(`/bgms/${assetId}`);
+};
+
+// ==========================================
+// 6. 系统设置 (Settings)
 // ==========================================
 
 export const getSettings = async () => {

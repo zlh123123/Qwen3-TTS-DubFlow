@@ -19,6 +19,9 @@ class CharacterUpdate(BaseModel):
     description: Optional[str] = None
     prompt: Optional[str] = None
     ref_text: Optional[str] = None
+    is_confirmed: Optional[bool] = None
+    ref_audio_path: Optional[str] = None
+    duration: Optional[float] = None
 
 # back->front: 角色响应
 class CharacterResponse(BaseModel):

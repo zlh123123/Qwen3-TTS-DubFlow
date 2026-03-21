@@ -1,10 +1,7 @@
 import json
 import os
 from sqlalchemy.orm import Session
-from models.task import Task
-from models.project import Project
-from models.character import Character
-from models.config import Config  
+from database import Task, Project, Character, Config
 from openai import OpenAI
 import openai
 import logging

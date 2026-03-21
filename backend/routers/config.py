@@ -2,7 +2,7 @@ from typing import List, Dict
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import get_db
-from models.config import Config
+from database import Config
 from schemas.config import ConfigBatchUpdate, ConfigGroupResponse, ConfigResponse
 from collections import defaultdict
 

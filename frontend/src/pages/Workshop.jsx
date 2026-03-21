@@ -25,6 +25,7 @@ export default function Workshop() {
   
   // 生成冷却
   const [cooldown, setCooldown] = useState(0); 
+  const [reconfirmNotice, setReconfirmNotice] = useState(null);
 
   // 弹窗控制
   const [showAddModal, setShowAddModal] = useState(false);
@@ -39,6 +40,7 @@ export default function Workshop() {
 
   const { startPolling, loading: isRolling } = useTaskPoller();
   const actChar = chars.find(c => c.id === actID);
+  const VOICE_IMPACT_FIELDS = new Set(['gender', 'age', 'description', 'prompt', 'ref_text']);
 
   // =================副作用 (Effects)=================
 
@@ -144,6 +146,24 @@ export default function Workshop() {
     try { await API.updateCharacter(id, { [field]: value }); } catch (e) { console.error(e); }
   };
 
+  const handleCharacterFieldChange = (field, value) => {
+    if (!actChar) return;
+    const shouldResetConfirmed = actChar.is_confirmed && VOICE_IMPACT_FIELDS.has(field) && actChar[field] !== value;
+
+    mutate(actID, {
+      [field]: value,
+      ...(shouldResetConfirmed ? { is_confirmed: false } : {})
+    });
+
+    if (shouldResetConfirmed) {
+      setReconfirmNotice({
+        characterId: actID,
+        changedField: field
+      });
+      syncToBackend(actID, 'is_confirmed', false);
+    }
+  };
+
   // =================交互逻辑=================
 
   const openAddModal = () => {
@@ -238,7 +258,8 @@ export default function Workshop() {
     if (!actChar || isRolling || cooldown > 0) return;
 
     setCooldown(10); 
-    mutate(actID, { ref_audio_path: '' }); 
+    mutate(actID, { ref_audio_path: '', is_confirmed: false }); 
+    setReconfirmNotice(null);
     setIsPlaying(false);
     setCurrentTime(0);
 
@@ -257,6 +278,18 @@ export default function Workshop() {
         }
       });
     } catch (err) { alert(t('msg_generate_failed')); }
+  };
+
+  const handleConfirmVoice = async () => {
+    if (!actChar?.ref_audio_path || isRolling) return;
+    mutate(actID, { is_confirmed: true });
+    setReconfirmNotice(null);
+    try {
+      await API.updateCharacter(actID, { is_confirmed: true });
+    } catch (err) {
+      mutate(actID, { is_confirmed: false });
+      alert(lang === 'zh-CN' ? '确认失败，请重试' : 'Failed to confirm voice');
+    }
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center text-[#D3BC8E] font-bold bg-[#F0F2F5] dark:bg-[#1B1D22]">{t('loading')}</div>;
@@ -419,19 +452,19 @@ export default function Workshop() {
                 <div className="col-span-10 grid grid-cols-3 gap-6">
                   <div className="space-y-1">
                     <label className="text-[10px] text-[#8C7D6B] font-black uppercase">{t('lbl_name')}</label>
-                    <input className="genshin-input-simple" value={actChar.name} onChange={e => mutate(actID, {name: e.target.value})} onBlur={e => syncToBackend(actID, 'name', e.target.value)} />
+                    <input className="genshin-input-simple" value={actChar.name} onChange={e => handleCharacterFieldChange('name', e.target.value)} onBlur={e => syncToBackend(actID, 'name', e.target.value)} />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] text-[#8C7D6B] font-black uppercase">{t('lbl_gender')}</label>
-                    <input className="genshin-input-simple" value={actChar.gender} onChange={e => mutate(actID, {gender: e.target.value})} onBlur={e => syncToBackend(actID, 'gender', e.target.value)} />
+                    <input className="genshin-input-simple" value={actChar.gender} onChange={e => handleCharacterFieldChange('gender', e.target.value)} onBlur={e => syncToBackend(actID, 'gender', e.target.value)} />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] text-[#8C7D6B] font-black uppercase">{t('lbl_age')}</label>
-                    <input className="genshin-input-simple" value={actChar.age} onChange={e => mutate(actID, {age: e.target.value})} onBlur={e => syncToBackend(actID, 'age', e.target.value)} />
+                    <input className="genshin-input-simple" value={actChar.age} onChange={e => handleCharacterFieldChange('age', e.target.value)} onBlur={e => syncToBackend(actID, 'age', e.target.value)} />
                   </div>
                   <div className="col-span-3 space-y-1">
                     <label className="text-[10px] text-[#8C7D6B] font-black uppercase">{t('lbl_description')}</label>
-                    <textarea className="genshin-input-simple h-20 py-3" value={actChar.description} onChange={e => mutate(actID, {description: e.target.value})} onBlur={e => syncToBackend(actID, 'description', e.target.value)} />
+                    <textarea className="genshin-input-simple h-20 py-3" value={actChar.description} onChange={e => handleCharacterFieldChange('description', e.target.value)} onBlur={e => syncToBackend(actID, 'description', e.target.value)} />
                   </div>
                 </div>
               </div>
@@ -439,9 +472,16 @@ export default function Workshop() {
               {/* 2. 底部语音调试区 */}
               <div className="bg-[#EBE5D9]/50 dark:bg-black/20 p-8 rounded-[2.5rem] space-y-6">
                 <div className="grid grid-cols-2 gap-8">
-                  <textarea className="genshin-input-simple h-24 py-3" value={actChar.prompt} onChange={e => mutate(actID, {prompt: e.target.value})} onBlur={e => syncToBackend(actID, 'prompt', e.target.value)} placeholder={t('ph_prompt')} />
-                  <textarea className="genshin-input-simple h-24 py-3" value={actChar.ref_text} onChange={e => mutate(actID, {ref_text: e.target.value})} onBlur={e => syncToBackend(actID, 'ref_text', e.target.value)} placeholder={t('ph_ref_text')} />
+                  <textarea className="genshin-input-simple h-24 py-3" value={actChar.prompt} onChange={e => handleCharacterFieldChange('prompt', e.target.value)} onBlur={e => syncToBackend(actID, 'prompt', e.target.value)} placeholder={t('ph_prompt')} />
+                  <textarea className="genshin-input-simple h-24 py-3" value={actChar.ref_text} onChange={e => handleCharacterFieldChange('ref_text', e.target.value)} onBlur={e => syncToBackend(actID, 'ref_text', e.target.value)} placeholder={t('ph_ref_text')} />
                 </div>
+                {reconfirmNotice?.characterId === actID && (
+                  <div className="rounded-xl border border-amber-300 bg-amber-50 text-amber-700 px-4 py-2 text-xs font-bold">
+                    {lang === 'zh-CN'
+                      ? '你修改了音色相关参数，已自动取消确认。请重新试听并确认该角色音色。'
+                      : 'Voice-related fields changed. Confirmation was reset. Please preview and confirm again.'}
+                  </div>
+                )}
 
                 {/* 播放器条 */}
                 <div 
@@ -505,7 +545,7 @@ export default function Workshop() {
                     </span>
                   </button>
                   {/* 确认按钮 */}
-                  <button onClick={() => mutate(actID, {is_confirmed: true})} disabled={isRolling || !actChar.ref_audio_path} className={`flex-1 py-4 rounded-2xl font-bold transition-all ${actChar.is_confirmed ? 'bg-green-600 text-white' : 'bg-[#D3BC8E] text-[#3B4255] disabled:opacity-30'}`}>
+                  <button onClick={handleConfirmVoice} disabled={isRolling || !actChar.ref_audio_path} className={`flex-1 py-4 rounded-2xl font-bold transition-all ${actChar.is_confirmed ? 'bg-green-600 text-white' : 'bg-[#D3BC8E] text-[#3B4255] disabled:opacity-30'}`}>
                     {t('confirm')}
                   </button>
                 </div>

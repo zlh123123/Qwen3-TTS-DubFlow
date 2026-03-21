@@ -1,6 +1,6 @@
 import json
 from sqlalchemy.orm import Session
-from models.config import Config
+from database import Config
 
 # 参考 API_mini.md 构建默认配置
 DEFAULT_CONFIGS = [

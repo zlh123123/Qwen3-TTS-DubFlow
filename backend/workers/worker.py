@@ -1,9 +1,7 @@
 import time
 import threading
 from sqlalchemy.orm import Session
-from database import SessionLocal  
-from models.task import Task
-from models.project import Project
+from database import SessionLocal, Task, Project
 from .analyze_characters import analyze_characters_handler
 # from parse_script import parse_script_handler
 from .synthesis_voicedesign import synthesis_voicedesign_handler

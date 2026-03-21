@@ -7,13 +7,14 @@ export function useTaskPoller() {
   const pollTimer = useRef(null);
 
   const startPolling = async (taskId, onSuccess) => {
+    clearTimeout(pollTimer.current);
     setLoading(true);
     setError(null);
 
     const checkStatus = async () => {
       try {
         const res = await getTaskStatus(taskId); // 调用 GET /api/tasks/{id}
-        const { status, result, error: taskError } = res.data;
+        const { status, result, error_msg: taskError } = res || {};
 
         if (status === 'success') {
           setLoading(false);

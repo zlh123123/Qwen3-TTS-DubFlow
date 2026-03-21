@@ -5,10 +5,7 @@ import base64
 import logging
 import json
 from sqlalchemy.orm import Session
-from models.task import Task
-from models.config import Config
-from models.character import Character
-from models.project import Project
+from database import Task, Config, Character, Project
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

@@ -4,14 +4,14 @@ from typing import Optional
 # front->back: 创建台词
 class ScriptLineCreate(BaseModel):
     project_id: str
-    character_id: Optional[int] = None
+    character_id: Optional[str] = None
     order_index: int
     text: str
     speed: float = 1.0
 
 # front->back: 更新台词
 class ScriptLineUpdate(BaseModel):
-    character_id: Optional[int] = None
+    character_id: Optional[str] = None
     text: Optional[str] = None
     speed: Optional[float] = None
 
@@ -19,7 +19,7 @@ class ScriptLineUpdate(BaseModel):
 class ScriptLineResponse(BaseModel):
     id: int
     project_id: str
-    character_id: Optional[int] = None
+    character_id: Optional[str] = None
     character_name: Optional[str] = None  # 冗余字段方便前端展示
     order_index: int
     text: str

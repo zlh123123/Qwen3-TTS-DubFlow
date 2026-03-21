@@ -30,8 +30,8 @@ export default function Studio() {
           API.getCharacters(pid),
           API.getScript(pid)
         ]);
-        setChars(cRes?.data || []);
-        setLines(sRes?.data || []);
+        setChars(cRes?.data || cRes || []);
+        setLines(sRes?.data || sRes || []);
       } catch (e) {
         console.error("数据加载失败:", e);
       } finally {
@@ -54,7 +54,7 @@ export default function Studio() {
   const handleAddLine = async (prevId) => {
     try {
       const res = await API.addLine(pid, prevId);
-      const newLine = res.data;
+      const newLine = res?.data || res;
       const idx = lines.findIndex(l => l.id === prevId);
       const newArr = [...lines];
       newArr.splice(idx + 1, 0, newLine);
@@ -77,7 +77,9 @@ export default function Studio() {
     mutate(id, { status: 'processing' });
     try {
       const res = await API.synthesize({ project_id: pid, line_ids: [id] });
-      startPolling(res.data.task_id, (result) => {
+      const taskId = res?.task_id || res?.data?.task_id;
+      if (!taskId) throw new Error('task_id missing');
+      startPolling(taskId, (result) => {
         mutate(id, { status: 'synthesized', audio_url: result.audio_url });
       });
     } catch (e) {
@@ -94,7 +96,9 @@ export default function Studio() {
 
     setLines(prev => prev.map(l => targetIds.includes(l.id) ? { ...l, status: 'processing' } : l));
     const res = await API.synthesize({ project_id: pid, line_ids: targetIds });
-    startPolling(res.data.task_id, () => {
+    const taskId = res?.task_id || res?.data?.task_id;
+    if (!taskId) throw new Error('task_id missing');
+    startPolling(taskId, () => {
       alert(t('msg_batch_done'));
       // 实际开发中此处通常会重新请求一次 getScript 刷新全部音频状态
     });
