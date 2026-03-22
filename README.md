@@ -8,7 +8,7 @@
 
 ---
 
-**A local-first AI audio storytelling studio**
+**A pipeline-oriented AI audio storytelling studio**
   
 From script to finished audio: character analysis, voice design, studio editing, and batch TTS generation.
 

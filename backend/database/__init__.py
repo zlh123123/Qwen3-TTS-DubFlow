@@ -11,6 +11,9 @@ from .database import (
     CharacterRefAsset,
     EffectAsset,
     BgmAsset,
+    ProjectCharacterRefAssetLink,
+    ProjectEffectAssetLink,
+    ProjectBgmAssetLink,
 )
 
 __all__ = [
@@ -26,4 +29,7 @@ __all__ = [
     "CharacterRefAsset",
     "EffectAsset",
     "BgmAsset",
+    "ProjectCharacterRefAssetLink",
+    "ProjectEffectAssetLink",
+    "ProjectBgmAssetLink",
 ]

@@ -20,9 +20,15 @@ class BgmAssetUpdate(BaseModel):
     note: Optional[str] = None
 
 
+class BgmLinkRequest(BaseModel):
+    asset_id: str
+
+
 class BgmAssetResponse(BaseModel):
     id: str
-    project_id: str
+    project_id: Optional[str] = None
+    link_id: Optional[str] = None
+    is_linked: Optional[bool] = None
     source_type: str
     display_name: str
     file_path: str

@@ -6,6 +6,7 @@ fn main() {
     let mut backend_child = backend::spawn_backend_sidecar();
 
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 

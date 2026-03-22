@@ -28,40 +28,60 @@ def load_prompt(language: str) -> str:
 
 def get_llm_client(db: Session):
     """根据设置表获取LLM客户端和模型名"""
-    active_provider = db.query(Config).filter(Config.key == "llm.active_provider").first()
-    if not active_provider:
+    all_configs = db.query(Config).all()
+    config_map = {item.key: item.value for item in all_configs}
+    provider = (config_map.get("llm.active_provider") or "").strip().lower()
+    if not provider:
         raise ValueError("LLM provider not configured")
-    provider = active_provider.value
-    
-    api_key = None
-    base_url = None
-    model = None
-    if provider == "deepseek":
-        api_key_config = db.query(Config).filter(Config.key == "llm.deepseek.api_key").first()
-        api_key = api_key_config.value if api_key_config else None
-        base_url = "https://api.deepseek.com"
-        model = "deepseek-chat"
-        # print(f"DeepSeek config - API Key: {api_key[:10] if api_key else 'None'}..., Base URL: {base_url}, Model: {model}")
 
-    elif provider == "qwen":
-        api_key_config = db.query(Config).filter(Config.key == "llm.qwen.api_key").first()
-        api_key = api_key_config.value if api_key_config else None
-        base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-        model = "qwen-plus"
-    elif provider == "selfdef":
-        url_config = db.query(Config).filter(Config.key == "llm.selfdef.url").first()
-        api_key_config = db.query(Config).filter(Config.key == "llm.selfdef.api_key").first()
-        model_config = db.query(Config).filter(Config.key == "llm.selfdef.model_name").first()
-        base_url = url_config.value if url_config else "http://localhost:11434"
-        api_key = api_key_config.value if api_key_config else None
-        model = model_config.value if model_config else "None"
+    builtin_key_map = {
+        "openai": ("llm.openai.api_key", "llm.openai.base_url", "llm.openai.model", "https://api.openai.com/v1", "gpt-4o-mini"),
+        "gemini": ("llm.gemini.api_key", "llm.gemini.base_url", "llm.gemini.model", "https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.5-flash"),
+        "claude": ("llm.claude.api_key", "llm.claude.base_url", "llm.claude.model", "https://openrouter.ai/api/v1", "anthropic/claude-3.5-sonnet"),
+        "deepseek": ("llm.deepseek.api_key", "llm.deepseek.base_url", "llm.deepseek.model", "https://api.deepseek.com", "deepseek-chat"),
+        "qwen": ("llm.qwen.api_key", "llm.qwen.base_url", "llm.qwen.model", "https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus"),
+        "ollama": ("llm.ollama.api_key", "llm.ollama.base_url", "llm.ollama.model", "http://localhost:11434/v1", "qwen2.5:7b"),
+    }
+
+    api_key = ""
+    base_url = ""
+    model = ""
+    if provider in builtin_key_map:
+        api_key_key, base_url_key, model_key, fallback_base, fallback_model = builtin_key_map[provider]
+        api_key = config_map.get(api_key_key) or ""
+        base_url = config_map.get(base_url_key) or fallback_base
+        model = config_map.get(model_key) or fallback_model
+    elif provider == "custom":
+        raw_json = config_map.get("llm.custom_providers_json") or "[]"
+        active_custom_id = config_map.get("llm.custom_active_id") or ""
+        try:
+            custom_providers = json.loads(raw_json)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Invalid custom providers JSON: {exc}")
+        if not isinstance(custom_providers, list) or not custom_providers:
+            raise ValueError("No custom provider configured")
+        current_provider = None
+        if active_custom_id:
+            for item in custom_providers:
+                if isinstance(item, dict) and item.get("id") == active_custom_id:
+                    current_provider = item
+                    break
+        if current_provider is None:
+            current_provider = custom_providers[0]
+        if not isinstance(current_provider, dict):
+            raise ValueError("Invalid custom provider entry")
+        api_key = str(current_provider.get("api_key") or "")
+        base_url = str(current_provider.get("base_url") or "http://localhost:11434/v1")
+        model = str(current_provider.get("model") or "")
     else:
         raise ValueError(f"Unsupported provider: {provider}")
-    
-    if not api_key and provider != "selfdef":  
+
+    if not model:
+        raise ValueError("LLM model is not configured")
+    if not api_key and provider != "ollama":
         raise ValueError("API key not configured")
-    
-    client = OpenAI(api_key=api_key, base_url=base_url)
+
+    client = OpenAI(api_key=(api_key or "EMPTY"), base_url=base_url)
     return client, model
 
 def analyze_characters_handler(task: Task, db: Session):

@@ -19,6 +19,11 @@ export const getProjectDetail = async (pid) => {
   return client.get(`/projects/${pid}`);
 };
 
+// 重命名项目
+export const renameProject = async (pid, data) => {
+  return client.put(`/projects/${pid}`, data);
+};
+
 // 删除项目
 export const deleteProject = async (pid) => {
   return client.delete(`/projects/${pid}`);
@@ -108,12 +113,30 @@ export const getCharacterRefs = async (pid) => {
   return client.get(`/projects/${pid}/character-refs`);
 };
 
+export const getGlobalCharacterRefs = async (pid) => {
+  const params = {};
+  if (pid) params.project_id = pid;
+  return client.get('/assets/character-refs', { params });
+};
+
 export const importCharacterRef = async (pid, data) => {
   return client.post(`/projects/${pid}/character-refs/import`, data);
 };
 
+export const linkCharacterRef = async (pid, data) => {
+  return client.post(`/projects/${pid}/character-refs/link`, data);
+};
+
+export const updateCharacterRefLink = async (pid, assetId, data) => {
+  return client.put(`/projects/${pid}/character-refs/${assetId}/link`, data);
+};
+
 export const updateCharacterRef = async (assetId, data) => {
   return client.put(`/character-refs/${assetId}`, data);
+};
+
+export const unlinkCharacterRef = async (pid, assetId) => {
+  return client.delete(`/projects/${pid}/character-refs/${assetId}/link`);
 };
 
 export const deleteCharacterRef = async (assetId) => {
@@ -124,12 +147,26 @@ export const getEffects = async (pid) => {
   return client.get(`/projects/${pid}/effects`);
 };
 
+export const getGlobalEffects = async (pid) => {
+  const params = {};
+  if (pid) params.project_id = pid;
+  return client.get('/assets/effects', { params });
+};
+
 export const importEffect = async (pid, data) => {
   return client.post(`/projects/${pid}/effects/import`, data);
 };
 
+export const linkEffect = async (pid, data) => {
+  return client.post(`/projects/${pid}/effects/link`, data);
+};
+
 export const updateEffect = async (assetId, data) => {
   return client.put(`/effects/${assetId}`, data);
+};
+
+export const unlinkEffect = async (pid, assetId) => {
+  return client.delete(`/projects/${pid}/effects/${assetId}/link`);
 };
 
 export const deleteEffect = async (assetId) => {
@@ -140,12 +177,26 @@ export const getBgms = async (pid) => {
   return client.get(`/projects/${pid}/bgms`);
 };
 
+export const getGlobalBgms = async (pid) => {
+  const params = {};
+  if (pid) params.project_id = pid;
+  return client.get('/assets/bgms', { params });
+};
+
 export const importBgm = async (pid, data) => {
   return client.post(`/projects/${pid}/bgms/import`, data);
 };
 
+export const linkBgm = async (pid, data) => {
+  return client.post(`/projects/${pid}/bgms/link`, data);
+};
+
 export const updateBgm = async (assetId, data) => {
   return client.put(`/bgms/${assetId}`, data);
+};
+
+export const unlinkBgm = async (pid, assetId) => {
+  return client.delete(`/projects/${pid}/bgms/${assetId}/link`);
 };
 
 export const deleteBgm = async (assetId) => {
@@ -162,4 +213,11 @@ export const getSettings = async () => {
 
 export const updateSettings = async (settings) => {
   return client.put('/settings', settings);
+};
+
+export const fetchLLMModels = async (provider, customId) => {
+  const params = {};
+  if (provider) params.provider = provider;
+  if (customId) params.custom_id = customId;
+  return client.get('/settings/llm/models', { params });
 };

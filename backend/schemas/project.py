@@ -7,6 +7,11 @@ class ProjectCreate(BaseModel):
     name: str
     content: str  
 
+
+class ProjectUpdate(BaseModel):
+    name: str
+
+
 # back->front
 class ProjectResponse(BaseModel):
     id: str

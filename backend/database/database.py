@@ -15,6 +15,7 @@ from sqlalchemy import (
     Integer,
     ForeignKey,
     JSON,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from config import DATABASE_PATH, DATABASE_URL as ENV_DATABASE_URL
@@ -28,6 +29,10 @@ else:
 if DATABASE_URL.startswith("sqlite:///"):
     # sqlite:///./storage/database.db 或 sqlite:///storage/database.db
     db_rel = DATABASE_URL.replace("sqlite:///", "", 1)
+    if not os.path.isabs(db_rel):
+        backend_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        db_rel = os.path.abspath(os.path.join(backend_root, db_rel))
+        DATABASE_URL = f"sqlite:///{db_rel}"
     db_dir = os.path.dirname(db_rel) or "."
     os.makedirs(db_dir, exist_ok=True)
 
@@ -86,20 +91,20 @@ class Project(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    character_ref_assets = relationship(
-        "CharacterRefAsset",
+    character_ref_links = relationship(
+        "ProjectCharacterRefAssetLink",
         back_populates="project",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    effect_assets = relationship(
-        "EffectAsset",
+    effect_links = relationship(
+        "ProjectEffectAssetLink",
         back_populates="project",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    bgm_assets = relationship(
-        "BgmAsset",
+    bgm_links = relationship(
+        "ProjectBgmAssetLink",
         back_populates="project",
         cascade="all, delete-orphan",
         passive_deletes=True,
@@ -122,7 +127,7 @@ class Character(Base):
     ref_text = Column(String, nullable=True)
 
     project = relationship("Project", back_populates="characters")
-    character_ref_assets = relationship("CharacterRefAsset", back_populates="character")
+    character_ref_links = relationship("ProjectCharacterRefAssetLink", back_populates="character")
 
 
 class ScriptLine(Base):
@@ -173,8 +178,9 @@ class CharacterRefAsset(Base):
     __tablename__ = "character_ref_assets"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
-    character_id = Column(String, ForeignKey("characters.id", ondelete="SET NULL"), nullable=True)
+    # legacy columns: 兼容旧数据库结构，当前逻辑不依赖
+    project_id = Column(String, nullable=True)
+    character_id = Column(String, nullable=True)
     source_type = Column(String, nullable=False, default="imported")  # imported/generated/voice_design
     display_name = Column(String, nullable=False)
     file_path = Column(String, nullable=False)
@@ -195,15 +201,15 @@ class CharacterRefAsset(Base):
     character_prompt_snapshot = Column(Text, nullable=True)
     character_ref_text_snapshot = Column(Text, nullable=True)
 
-    project = relationship("Project", back_populates="character_ref_assets")
-    character = relationship("Character", back_populates="character_ref_assets")
+    project_links = relationship("ProjectCharacterRefAssetLink", back_populates="asset", cascade="all, delete-orphan", passive_deletes=True)
 
 
 class EffectAsset(Base):
     __tablename__ = "effect_assets"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    # legacy column: 兼容旧数据库结构，当前逻辑不依赖
+    project_id = Column(String, nullable=True)
     source_type = Column(String, nullable=False, default="imported")
     effect_category = Column(String, nullable=False, default="ambience")  # ambience/effect
     display_name = Column(String, nullable=False)
@@ -217,14 +223,15 @@ class EffectAsset(Base):
     note = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.now)
 
-    project = relationship("Project", back_populates="effect_assets")
+    project_links = relationship("ProjectEffectAssetLink", back_populates="asset", cascade="all, delete-orphan", passive_deletes=True)
 
 
 class BgmAsset(Base):
     __tablename__ = "bgm_assets"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    # legacy column: 兼容旧数据库结构，当前逻辑不依赖
+    project_id = Column(String, nullable=True)
     source_type = Column(String, nullable=False, default="imported")
     display_name = Column(String, nullable=False)
     file_path = Column(String, nullable=False)
@@ -239,4 +246,51 @@ class BgmAsset(Base):
     note = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.now)
 
-    project = relationship("Project", back_populates="bgm_assets")
+    project_links = relationship("ProjectBgmAssetLink", back_populates="asset", cascade="all, delete-orphan", passive_deletes=True)
+
+
+class ProjectCharacterRefAssetLink(Base):
+    __tablename__ = "project_character_ref_asset_links"
+    __table_args__ = (
+        UniqueConstraint("project_id", "asset_id", name="uq_project_character_ref_asset_link"),
+    )
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    asset_id = Column(String, ForeignKey("character_ref_assets.id", ondelete="CASCADE"), nullable=False)
+    character_id = Column(String, ForeignKey("characters.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.now)
+
+    project = relationship("Project", back_populates="character_ref_links")
+    asset = relationship("CharacterRefAsset", back_populates="project_links")
+    character = relationship("Character", back_populates="character_ref_links")
+
+
+class ProjectEffectAssetLink(Base):
+    __tablename__ = "project_effect_asset_links"
+    __table_args__ = (
+        UniqueConstraint("project_id", "asset_id", name="uq_project_effect_asset_link"),
+    )
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    asset_id = Column(String, ForeignKey("effect_assets.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.now)
+
+    project = relationship("Project", back_populates="effect_links")
+    asset = relationship("EffectAsset", back_populates="project_links")
+
+
+class ProjectBgmAssetLink(Base):
+    __tablename__ = "project_bgm_asset_links"
+    __table_args__ = (
+        UniqueConstraint("project_id", "asset_id", name="uq_project_bgm_asset_link"),
+    )
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    asset_id = Column(String, ForeignKey("bgm_assets.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.now)
+
+    project = relationship("Project", back_populates="bgm_links")
+    asset = relationship("BgmAsset", back_populates="project_links")

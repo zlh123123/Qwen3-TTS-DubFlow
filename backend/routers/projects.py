@@ -2,8 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from database import get_db
-from database import Project, Task, Character, ScriptLine, CharacterRefAsset, EffectAsset, BgmAsset
-from schemas.project import ProjectCreate, ProjectResponse
+from database import (
+    Project,
+    Task,
+    Character,
+    ScriptLine,
+    ProjectCharacterRefAssetLink,
+    ProjectEffectAssetLink,
+    ProjectBgmAssetLink,
+)
+from schemas.project import ProjectCreate, ProjectUpdate, ProjectResponse
 from schemas.character import CharacterResponse
 import shutil
 import os
@@ -74,6 +82,23 @@ def get_project_detail(project_id: str, db: Session = Depends(get_db)):
         "state": project.state,
     }
 
+
+# 重命名项目
+@router.put("/{project_id}", response_model=ProjectResponse)
+def rename_project(project_id: str, item: ProjectUpdate, db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    next_name = (item.name or "").strip()
+    if not next_name:
+        raise HTTPException(status_code=400, detail="Project name cannot be empty")
+
+    project.name = next_name
+    db.commit()
+    db.refresh(project)
+    return project
+
 # 删除项目
 @router.delete("/{project_id}")
 def delete_project(project_id: str, db: Session = Depends(get_db)):
@@ -84,9 +109,9 @@ def delete_project(project_id: str, db: Session = Depends(get_db)):
     # 历史数据库可能没开外键级联，这里显式清理子表，避免孤儿数据
     db.query(Task).filter(Task.project_id == project_id).delete(synchronize_session=False)
     db.query(ScriptLine).filter(ScriptLine.project_id == project_id).delete(synchronize_session=False)
-    db.query(CharacterRefAsset).filter(CharacterRefAsset.project_id == project_id).delete(synchronize_session=False)
-    db.query(EffectAsset).filter(EffectAsset.project_id == project_id).delete(synchronize_session=False)
-    db.query(BgmAsset).filter(BgmAsset.project_id == project_id).delete(synchronize_session=False)
+    db.query(ProjectCharacterRefAssetLink).filter(ProjectCharacterRefAssetLink.project_id == project_id).delete(synchronize_session=False)
+    db.query(ProjectEffectAssetLink).filter(ProjectEffectAssetLink.project_id == project_id).delete(synchronize_session=False)
+    db.query(ProjectBgmAssetLink).filter(ProjectBgmAssetLink.project_id == project_id).delete(synchronize_session=False)
     db.query(Character).filter(Character.project_id == project_id).delete(synchronize_session=False)
 
     # 删项目主记录

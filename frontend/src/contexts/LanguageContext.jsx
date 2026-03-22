@@ -51,16 +51,46 @@ const DICT = {
     tab_llm: '语言模型',
     tab_tts: '语音后端',
     tab_syn: '合成策略',
+    tab_about: '关于',
     
     'app.theme_mode': '主题模式',
     'app.language': '系统语言',
+    'app.font_size': '字体大小',
+    'llm_provider_pick': '模型提供方',
     'llm.active_provider': '当前 LLM 服务商',
     'llm.deepseek.api_key': 'DeepSeek API Key',
+    'llm.deepseek.base_url': 'DeepSeek 接口地址',
+    'llm.deepseek.model': 'DeepSeek 模型',
+    'llm.qwen.api_key': 'Qwen API Key',
+    'llm.qwen.base_url': 'Qwen 接口地址',
+    'llm.qwen.model': 'Qwen 模型',
+    'llm.selfdef.url': '自定义 LLM 地址',
+    'llm.selfdef.api_key': '自定义 LLM API Key',
     'tts.backend': 'TTS 后端类型',
     'syn.default_speed': '默认语速',
     'opt.light': '明亮',
     'opt.dark': '暗黑',
     'opt.system': '跟随系统',
+    'opt.small': '小',
+    'opt.medium': '中',
+    'opt.large': '大',
+    'opt.zh-CN': '简体中文',
+    'opt.en-US': 'English',
+    'opt.ja-JP': '日本語',
+    'opt.ko-KR': '한국어',
+    'opt.es-ES': 'Español',
+    'opt.fr-FR': 'Français',
+    'opt.de-DE': 'Deutsch',
+    'opt.deepseek': 'DeepSeek',
+    'opt.qwen': 'Qwen',
+    'opt.selfdef': '自定义',
+    'opt.local_vllm': '本地 vLLM',
+    'opt.autodl': 'AutoDL',
+    'opt.aliyun': '阿里云',
+    'opt.cuda': 'CUDA',
+    'opt.cpu': 'CPU',
+    'opt.beijing': '北京',
+    'opt.singapore': '新加坡',
     'llm.selfdef.model_name': '自定义模型名称',
     
     btn_save: '同步修改',
@@ -139,12 +169,19 @@ const DICT = {
     tab_llm: 'LLM Core',
     tab_tts: 'TTS Backend',
     tab_syn: 'Strategy',
+    tab_about: 'About',
 
     'app.theme_mode': 'Theme Mode',
     'app.language': 'System Language',
+    'app.font_size': 'Font Size',
+    'llm_provider_pick': 'Provider',
     'llm.active_provider': 'Active LLM Provider',
     'llm.deepseek.api_key': 'DeepSeek API Key',
+    'llm.deepseek.base_url': 'DeepSeek Base URL',
+    'llm.deepseek.model': 'DeepSeek Model',
     'llm.qwen.api_key': 'Qwen API Key',
+    'llm.qwen.base_url': 'Qwen Base URL',
+    'llm.qwen.model': 'Qwen Model',
     'llm.selfdef.url': 'Custom LLM URL',
     'llm.selfdef.api_key': 'Custom LLM API Key',
     'llm.selfdef.model_name': 'Custom Model Name',
@@ -167,6 +204,29 @@ const DICT = {
     'syn.audio_format': 'Audio Format',
     'syn.auto_slice': 'Auto Text Slicing',
     'syn.text_clean': 'Text Pre-cleaning',
+    'opt.light': 'Light',
+    'opt.dark': 'Dark',
+    'opt.system': 'System',
+    'opt.small': 'Small',
+    'opt.medium': 'Medium',
+    'opt.large': 'Large',
+    'opt.zh-CN': 'Simplified Chinese',
+    'opt.en-US': 'English',
+    'opt.ja-JP': 'Japanese',
+    'opt.ko-KR': 'Korean',
+    'opt.es-ES': 'Spanish',
+    'opt.fr-FR': 'French',
+    'opt.de-DE': 'German',
+    'opt.deepseek': 'DeepSeek',
+    'opt.qwen': 'Qwen',
+    'opt.selfdef': 'Custom',
+    'opt.local_vllm': 'Local vLLM',
+    'opt.autodl': 'AutoDL',
+    'opt.aliyun': 'Aliyun',
+    'opt.cuda': 'CUDA',
+    'opt.cpu': 'CPU',
+    'opt.beijing': 'Beijing',
+    'opt.singapore': 'Singapore',
 
     btn_save: 'Save Changes',
     btn_saving: 'Saving...',
@@ -242,12 +302,19 @@ const DICT = {
     tab_llm: '言語モデル',
     tab_tts: '音声エンジン',
     tab_syn: '合成戦略',
+    tab_about: '情報',
 
     'app.theme_mode': 'テーマ',
     'app.language': '言語',
+    'app.font_size': 'フォントサイズ',
+    'llm_provider_pick': 'プロバイダー',
     'llm.active_provider': 'LLMプロバイダー',
     'llm.deepseek.api_key': 'DeepSeek APIキー',
+    'llm.deepseek.base_url': 'DeepSeek ベースURL',
+    'llm.deepseek.model': 'DeepSeek モデル',
     'llm.qwen.api_key': 'Qwen APIキー',
+    'llm.qwen.base_url': 'Qwen ベースURL',
+    'llm.qwen.model': 'Qwen モデル',
     'llm.selfdef.url': 'カスタムLLM URL',
     'llm.selfdef.api_key': 'カスタムLLMキー',
     'llm.selfdef.model_name': 'カスタムモデル名',
@@ -261,6 +328,29 @@ const DICT = {
     'tts.autodl.vd_port': 'ボイスデザインポート',
     'tts.aliyun.api_key': 'DashScopeキー',
     'tts.aliyun.region': 'サービス地域',
+    'opt.light': 'ライト',
+    'opt.dark': 'ダーク',
+    'opt.system': 'システム',
+    'opt.small': '小',
+    'opt.medium': '中',
+    'opt.large': '大',
+    'opt.zh-CN': '簡体字中国語',
+    'opt.en-US': '英語',
+    'opt.ja-JP': '日本語',
+    'opt.ko-KR': '韓国語',
+    'opt.es-ES': 'スペイン語',
+    'opt.fr-FR': 'フランス語',
+    'opt.de-DE': 'ドイツ語',
+    'opt.deepseek': 'DeepSeek',
+    'opt.qwen': 'Qwen',
+    'opt.selfdef': 'カスタム',
+    'opt.local_vllm': 'ローカル vLLM',
+    'opt.autodl': 'AutoDL',
+    'opt.aliyun': '阿里雲',
+    'opt.cuda': 'CUDA',
+    'opt.cpu': 'CPU',
+    'opt.beijing': '北京',
+    'opt.singapore': 'シンガポール',
 
     'syn.default_speed': 'デフォルト速度',
     'syn.silence_duration': '休止時間(秒)',
@@ -304,9 +394,26 @@ const DICT = {
   }
 };
 
+const LANG_FALLBACK_MAP = {
+  'ko-KR': 'en-US',
+  'es-ES': 'en-US',
+  'fr-FR': 'en-US',
+  'de-DE': 'en-US',
+};
+
 export function LanguageProvider({ children }) {
-  const [lang, setLangState] = useState('zh-CN');
+  const [lang, setLangState] = useState('en-US');
   const [theme, setThemeState] = useState('light');
+  const [fontSize, setFontSizeState] = useState('medium');
+
+  const applyFontSize = (size) => {
+    if (typeof window === 'undefined') return;
+    const root = window.document.documentElement;
+    const normalized = typeof size === 'string' ? size : 'medium';
+    root.setAttribute('data-font-scale', normalized);
+    root.style.fontSize = '';
+    setFontSizeState(normalized);
+  };
 
   const applyTheme = (mode) => {
     if (typeof window === 'undefined') return;
@@ -331,13 +438,17 @@ export function LanguageProvider({ children }) {
         
         const langConfig = appearanceItems.find(i => i.key === 'app.language');
         const themeConfig = appearanceItems.find(i => i.key === 'app.theme_mode');
+        const fontSizeConfig = appearanceItems.find(i => i.key === 'app.font_size');
 
         if (langConfig?.value) setLangState(langConfig.value);
         if (themeConfig?.value) applyTheme(themeConfig.value);
+        if (fontSizeConfig?.value) applyFontSize(fontSizeConfig.value);
+        else applyFontSize('medium');
         
       } catch (err) {
         console.warn("Using local defaults due to API error", err);
         applyTheme('system');
+        applyFontSize('medium');
       }
     };
 
@@ -356,7 +467,8 @@ export function LanguageProvider({ children }) {
   }, []);
 
   const t = (key) => {
-    const translationSet = DICT[lang] || DICT['zh-CN'];
+    const fallbackLang = LANG_FALLBACK_MAP[lang];
+    const translationSet = DICT[lang] || (fallbackLang ? DICT[fallbackLang] : null) || DICT['en-US'];
     return translationSet[key] || key;
   };
 
@@ -366,6 +478,8 @@ export function LanguageProvider({ children }) {
       setLang: setLangState, 
       theme, 
       setTheme: applyTheme, 
+      fontSize,
+      setFontSize: applyFontSize,
       t 
     }}>
       {children}

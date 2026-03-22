@@ -18,9 +18,15 @@ class EffectAssetUpdate(BaseModel):
     note: Optional[str] = None
 
 
+class EffectLinkRequest(BaseModel):
+    asset_id: str
+
+
 class EffectAssetResponse(BaseModel):
     id: str
-    project_id: str
+    project_id: Optional[str] = None
+    link_id: Optional[str] = None
+    is_linked: Optional[bool] = None
     source_type: str
     effect_category: str
     display_name: str

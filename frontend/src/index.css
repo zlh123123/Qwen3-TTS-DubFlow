@@ -17,13 +17,39 @@
   }
 
   .dark body {
-    background-color: #1b1d22; 
-    color: #ece5d8;
-    background-image: 
-      radial-gradient(circle at 50% 50%, rgba(44,49,63,0.7) 0%, rgba(27,29,34,1) 100%),
-      url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 0l2 28 28 2-28 2-2 28-2-28-28-2 28-2z' fill='%23D3BC8E' fill-opacity='0.02' fill-rule='evenodd'/%3E%3C/svg%3E");
+    background-color: #111111;
+    color: #e8e8e8;
+    background-image: none;
   }
 }
+
+:root {
+  --app-font-scale: 1;
+}
+
+:root[data-font-scale='small'] {
+  --app-font-scale: 0.94;
+}
+
+:root[data-font-scale='medium'] {
+  --app-font-scale: 1;
+}
+
+:root[data-font-scale='large'] {
+  --app-font-scale: 1.08;
+}
+
+:root[data-font-scale] .text-xs { font-size: calc(0.75rem * var(--app-font-scale)); }
+:root[data-font-scale] .text-sm { font-size: calc(0.875rem * var(--app-font-scale)); }
+:root[data-font-scale] .text-base { font-size: calc(1rem * var(--app-font-scale)); }
+:root[data-font-scale] .text-lg { font-size: calc(1.125rem * var(--app-font-scale)); }
+:root[data-font-scale] .text-xl { font-size: calc(1.25rem * var(--app-font-scale)); }
+:root[data-font-scale] .text-2xl { font-size: calc(1.5rem * var(--app-font-scale)); }
+:root[data-font-scale] .text-3xl { font-size: calc(1.875rem * var(--app-font-scale)); }
+:root[data-font-scale] .text-4xl { font-size: calc(2.25rem * var(--app-font-scale)); }
+:root[data-font-scale] .text-\[10px\] { font-size: calc(10px * var(--app-font-scale)); }
+:root[data-font-scale] .text-\[11px\] { font-size: calc(11px * var(--app-font-scale)); }
+:root[data-font-scale] .text-\[15px\] { font-size: calc(15px * var(--app-font-scale)); }
 
 /* 滚动条美化 */
 ::-webkit-scrollbar { width: 6px; }

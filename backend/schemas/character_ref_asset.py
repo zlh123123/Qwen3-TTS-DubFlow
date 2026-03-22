@@ -18,9 +18,20 @@ class CharacterRefUpdate(BaseModel):
     note: Optional[str] = None
 
 
+class CharacterRefLinkRequest(BaseModel):
+    asset_id: str
+    character_id: Optional[str] = None
+
+
+class CharacterRefLinkUpdate(BaseModel):
+    character_id: Optional[str] = None
+
+
 class CharacterRefResponse(BaseModel):
     id: str
-    project_id: str
+    project_id: Optional[str] = None
+    link_id: Optional[str] = None
+    is_linked: Optional[bool] = None
     character_id: Optional[str] = None
     source_type: str
     display_name: str

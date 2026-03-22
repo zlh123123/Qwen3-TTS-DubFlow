@@ -1,4 +1,3 @@
-import json
 from sqlalchemy.orm import Session
 from database import Config
 
@@ -11,33 +10,106 @@ DEFAULT_CONFIGS = [
     },
     {
         "key": "app.language", "group": "appearance", "label": "语言",
-        "type": "select", "options": ["zh-CN", "en-US", "ja-JP"], "default": "zh-CN", "value": "zh-CN"
+        "type": "select",
+        "options": ["en-US", "zh-CN", "ja-JP", "ko-KR", "es-ES", "fr-FR", "de-DE"],
+        "default": "en-US",
+        "value": "en-US",
+    },
+    {
+        "key": "app.font_size", "group": "appearance", "label": "字体大小",
+        "type": "select",
+        "options": ["small", "medium", "large"],
+        "default": "medium",
+        "value": "medium",
     },
 
     # B. LLM Settings (LLM设置)
     {
         "key": "llm.active_provider", "group": "llm_settings", "label": "当前 LLM 服务商",
-        "type": "select", "options": ["deepseek", "qwen", "selfdef"], "default": "deepseek", "value": "deepseek"
+        "type": "select",
+        "options": ["openai", "gemini", "claude", "deepseek", "qwen", "ollama", "custom"],
+        "default": "deepseek",
+        "value": "deepseek"
+    },
+    {
+        "key": "llm.custom_active_id", "group": "llm_settings", "label": "当前自定义提供方",
+        "type": "text", "options": None, "default": "", "value": ""
+    },
+    {
+        "key": "llm.custom_providers_json", "group": "llm_settings", "label": "自定义提供方列表",
+        "type": "text", "options": None, "default": "[]", "value": "[]"
+    },
+    {
+        "key": "llm.openai.api_key", "group": "llm_settings", "label": "OpenAI API Key",
+        "type": "password", "options": None, "default": "", "value": ""
+    },
+    {
+        "key": "llm.openai.base_url", "group": "llm_settings", "label": "OpenAI Base URL",
+        "type": "text", "options": None, "default": "https://api.openai.com/v1", "value": "https://api.openai.com/v1"
+    },
+    {
+        "key": "llm.openai.model", "group": "llm_settings", "label": "OpenAI Model",
+        "type": "text", "options": None, "default": "gpt-4o-mini", "value": "gpt-4o-mini"
+    },
+    {
+        "key": "llm.gemini.api_key", "group": "llm_settings", "label": "Gemini API Key",
+        "type": "password", "options": None, "default": "", "value": ""
+    },
+    {
+        "key": "llm.gemini.base_url", "group": "llm_settings", "label": "Gemini Base URL",
+        "type": "text", "options": None, "default": "https://generativelanguage.googleapis.com/v1beta/openai", "value": "https://generativelanguage.googleapis.com/v1beta/openai"
+    },
+    {
+        "key": "llm.gemini.model", "group": "llm_settings", "label": "Gemini Model",
+        "type": "text", "options": None, "default": "gemini-2.5-flash", "value": "gemini-2.5-flash"
+    },
+    {
+        "key": "llm.claude.api_key", "group": "llm_settings", "label": "Claude API Key",
+        "type": "password", "options": None, "default": "", "value": ""
+    },
+    {
+        "key": "llm.claude.base_url", "group": "llm_settings", "label": "Claude Base URL",
+        "type": "text", "options": None, "default": "https://openrouter.ai/api/v1", "value": "https://openrouter.ai/api/v1"
+    },
+    {
+        "key": "llm.claude.model", "group": "llm_settings", "label": "Claude Model",
+        "type": "text", "options": None, "default": "anthropic/claude-3.5-sonnet", "value": "anthropic/claude-3.5-sonnet"
+    },
+    {
+        "key": "llm.ollama.api_key", "group": "llm_settings", "label": "Ollama API Key",
+        "type": "password", "options": None, "default": "", "value": ""
+    },
+    {
+        "key": "llm.ollama.base_url", "group": "llm_settings", "label": "Ollama Base URL",
+        "type": "text", "options": None, "default": "http://localhost:11434/v1", "value": "http://localhost:11434/v1"
+    },
+    {
+        "key": "llm.ollama.model", "group": "llm_settings", "label": "Ollama Model",
+        "type": "text", "options": None, "default": "qwen2.5:7b", "value": "qwen2.5:7b"
     },
     {
         "key": "llm.deepseek.api_key", "group": "llm_settings", "label": "DeepSeek API Key",
         "type": "password", "options": None, "default": "", "value": ""
     },
     {
+        "key": "llm.deepseek.base_url", "group": "llm_settings", "label": "DeepSeek Base URL",
+        "type": "text", "options": None, "default": "https://api.deepseek.com", "value": "https://api.deepseek.com"
+    },
+    {
+        "key": "llm.deepseek.model", "group": "llm_settings", "label": "DeepSeek Model",
+        "type": "text", "options": None, "default": "deepseek-chat", "value": "deepseek-chat"
+    },
+    {
         "key": "llm.qwen.api_key", "group": "llm_settings", "label": "Qwen API Key",
         "type": "password", "options": None, "default": "", "value": ""
     },
     {
-        "key": "llm.selfdef.url", "group": "llm_settings", "label": "自定义 LLM 地址",
-        "type": "text", "options": None, "default": "", "value": ""
+        "key": "llm.qwen.base_url", "group": "llm_settings", "label": "Qwen Base URL",
+        "type": "text", "options": None, "default": "https://dashscope.aliyuncs.com/compatible-mode/v1", "value": "https://dashscope.aliyuncs.com/compatible-mode/v1"
     },
     {
-        "key": "llm.selfdef.api_key", "group": "llm_settings", "label": "自定义 LLM API Key",
-        "type": "password", "options": None, "default": "", "value": ""
-    },
-        {
-        "key": "llm.selfdef.model_name", "group": "llm_settings", "label": "自定义 LLM 模型名称",
-        "type": "text", "options": None, "default": "", "value": ""
+        "key": "llm.qwen.model", "group": "llm_settings", "label": "Qwen Model",
+        "type": "text", "options": None, "default": "qwen-plus", "value": "qwen-plus"
     },
 
     # C. TTS Settings (语音合成设置)
@@ -112,18 +184,23 @@ def init_settings(db: Session):
     for item in DEFAULT_CONFIGS:
         # 复制一份 item 以免修改全局变量
         config_data = item.copy()
-        
-        # 将 options 列表转换为 JSON 字符串存储
-        # if isinstance(config_data.get("options"), list):
-        #     config_data["options"] = json.dumps(config_data["options"])
-            
-        # exists = db.query(Config).filter(Config.key == config_data["key"]).first()
-        
+
         exists = db.query(Config).filter(Config.key == config_data["key"]).first()
 
-        if not exists:
-            new_config = Config(**config_data)
-            db.add(new_config)
+        if exists:
+            # 同步配置元数据，避免旧库中的 options/label/type 长期漂移
+            exists.group = config_data.get("group", exists.group)
+            exists.label = config_data.get("label", exists.label)
+            exists.type = config_data.get("type", exists.type)
+            exists.options = config_data.get("options", exists.options)
+            exists.default = config_data.get("default", exists.default)
+            exists.is_public = config_data.get("is_public", exists.is_public)
+            if exists.value in (None, ""):
+                exists.value = config_data.get("value", exists.value)
+            continue
+
+        new_config = Config(**config_data)
+        db.add(new_config)
     
     db.commit()
     print("System settings initialized.")

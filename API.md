@@ -41,6 +41,7 @@ Narratis/
 │   └── storage/
 │       ├── database.db
 │       ├── temp/
+│       ├── assets/{character_refs|effects|bgms}/...
 │       └── projects/{project_id}/...
 ```
 
@@ -132,13 +133,11 @@ Narratis/
 | duration | Float | 时长 |
 | ref_text | String | 参考文本 |
 
-## CharacterRefAsset（角色参考音资产）
+## CharacterRefAsset（全局角色参考音资产）
 
 | 字段名 | 类型 | 说明 |
 |---|---|---|
 | id | String(UUID) | 主键 |
-| project_id | String(FK) | 关联 Project（CASCADE） |
-| character_id | String(FK) | 关联 Character（SET NULL） |
 | source_type | String | `imported` / `generated` / `voice_design` |
 | display_name | String | 显示名 |
 | file_path | String | 文件路径 |
@@ -157,12 +156,11 @@ Narratis/
 | character_prompt_snapshot | Text | 导入时音色提示快照 |
 | character_ref_text_snapshot | Text | 导入时参考文本快照 |
 
-## EffectAsset（环境音/音效）
+## EffectAsset（全局环境音/音效资产）
 
 | 字段名 | 类型 | 说明 |
 |---|---|---|
 | id | String(UUID) | 主键 |
-| project_id | String(FK) | 关联 Project（CASCADE） |
 | source_type | String | `imported` / `generated` |
 | effect_category | String | `ambience` / `effect` |
 | display_name | String | 显示名 |
@@ -176,12 +174,11 @@ Narratis/
 | note | Text | 备注 |
 | created_at | DateTime | 创建时间 |
 
-## BgmAsset
+## BgmAsset（全局 BGM 资产）
 
 | 字段名 | 类型 | 说明 |
 |---|---|---|
 | id | String(UUID) | 主键 |
-| project_id | String(FK) | 关联 Project（CASCADE） |
 | source_type | String | `imported` / `generated` |
 | display_name | String | 显示名 |
 | file_path | String | 文件路径 |
@@ -195,6 +192,37 @@ Narratis/
 | managed_file | Boolean | 是否托管 |
 | note | Text | 备注 |
 | created_at | DateTime | 创建时间 |
+
+## ProjectCharacterRefAssetLink（项目-角色语音引用）
+
+| 字段名 | 类型 | 说明 |
+|---|---|---|
+| id | String(UUID) | 主键 |
+| project_id | String(FK) | 关联 Project（CASCADE） |
+| asset_id | String(FK) | 关联 CharacterRefAsset（CASCADE） |
+| character_id | String(FK) | 关联 Character（SET NULL） |
+| created_at | DateTime | 创建时间 |
+| unique(project_id, asset_id) | 约束 | 一个项目只引用一次同一资产 |
+
+## ProjectEffectAssetLink（项目-环境音引用）
+
+| 字段名 | 类型 | 说明 |
+|---|---|---|
+| id | String(UUID) | 主键 |
+| project_id | String(FK) | 关联 Project（CASCADE） |
+| asset_id | String(FK) | 关联 EffectAsset（CASCADE） |
+| created_at | DateTime | 创建时间 |
+| unique(project_id, asset_id) | 约束 | 一个项目只引用一次同一资产 |
+
+## ProjectBgmAssetLink（项目-BGM 引用）
+
+| 字段名 | 类型 | 说明 |
+|---|---|---|
+| id | String(UUID) | 主键 |
+| project_id | String(FK) | 关联 Project（CASCADE） |
+| asset_id | String(FK) | 关联 BgmAsset（CASCADE） |
+| created_at | DateTime | 创建时间 |
+| unique(project_id, asset_id) | 约束 | 一个项目只引用一次同一资产 |
 
 ## Task
 
@@ -238,9 +266,19 @@ Narratis/
 ### 获取项目详情
 - `GET /api/projects/{project_id}`
 
+### 重命名项目
+- `PUT /api/projects/{project_id}`
+- 请求体示例：
+```json
+{
+  "name": "新的项目名称"
+}
+```
+
 ### 删除项目
 - `DELETE /api/projects/{project_id}`
-- 会删除数据库记录和 `storage/projects/{project_id}` 目录
+- 会删除项目记录、项目引用关系和 `storage/projects/{project_id}` 目录
+- 不会删除全局素材（`storage/assets/...`）
 
 ### 触发角色分析（异步）
 - `POST /api/projects/{project_id}/characters/analyze`
@@ -270,14 +308,23 @@ Narratis/
 
 ---
 
-## 资产库：角色参考音 / 环境音 / BGM
+## 资产库：全局资产 + 项目引用
+
+当前实现是双层结构：
+
+- 全局资产层：真实音频资产，跨项目复用
+- 项目引用层：项目只保存“引用关系”，删除项目不会删全局资产
 
 ### Character Ref Assets
 
-- `GET /api/projects/{project_id}/character-refs`
-- `POST /api/projects/{project_id}/character-refs/import`
-- `PUT /api/character-refs/{asset_id}`
-- `DELETE /api/character-refs/{asset_id}`
+- 项目引用列表：`GET /api/projects/{project_id}/character-refs`
+- 全局列表（可带 project_id 返回 is_linked 状态）：`GET /api/assets/character-refs`
+- 导入到全局并自动引用当前项目：`POST /api/projects/{project_id}/character-refs/import`
+- 引用全局资产到项目：`POST /api/projects/{project_id}/character-refs/link`
+- 更新项目引用（角色绑定）：`PUT /api/projects/{project_id}/character-refs/{asset_id}/link`
+- 取消项目引用：`DELETE /api/projects/{project_id}/character-refs/{asset_id}/link`
+- 更新全局资产元信息：`PUT /api/character-refs/{asset_id}`
+- 删除全局资产（影响所有项目）：`DELETE /api/character-refs/{asset_id}`
 
 导入请求示例：
 
@@ -292,12 +339,24 @@ Narratis/
 }
 ```
 
+引用请求示例：
+
+```json
+{
+  "asset_id": "asset_uuid",
+  "character_id": "char_uuid"
+}
+```
+
 ### Effect Assets
 
-- `GET /api/projects/{project_id}/effects`
-- `POST /api/projects/{project_id}/effects/import`
-- `PUT /api/effects/{asset_id}`
-- `DELETE /api/effects/{asset_id}`
+- 项目引用列表：`GET /api/projects/{project_id}/effects`
+- 全局列表：`GET /api/assets/effects`
+- 导入到全局并自动引用当前项目：`POST /api/projects/{project_id}/effects/import`
+- 引用全局资产到项目：`POST /api/projects/{project_id}/effects/link`
+- 取消项目引用：`DELETE /api/projects/{project_id}/effects/{asset_id}/link`
+- 更新全局资产元信息：`PUT /api/effects/{asset_id}`
+- 删除全局资产：`DELETE /api/effects/{asset_id}`
 
 导入请求示例：
 
@@ -312,10 +371,13 @@ Narratis/
 
 ### BGM Assets
 
-- `GET /api/projects/{project_id}/bgms`
-- `POST /api/projects/{project_id}/bgms/import`
-- `PUT /api/bgms/{asset_id}`
-- `DELETE /api/bgms/{asset_id}`
+- 项目引用列表：`GET /api/projects/{project_id}/bgms`
+- 全局列表：`GET /api/assets/bgms`
+- 导入到全局并自动引用当前项目：`POST /api/projects/{project_id}/bgms/import`
+- 引用全局资产到项目：`POST /api/projects/{project_id}/bgms/link`
+- 取消项目引用：`DELETE /api/projects/{project_id}/bgms/{asset_id}/link`
+- 更新全局资产元信息：`PUT /api/bgms/{asset_id}`
+- 删除全局资产：`DELETE /api/bgms/{asset_id}`
 
 导入请求示例：
 
