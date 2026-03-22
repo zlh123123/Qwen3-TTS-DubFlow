@@ -4,7 +4,6 @@ import {
   Plus,
   Trash2,
   Clock,
-  Sparkles,
   ChevronRight,
   Search,
   ArrowUpDown,
@@ -149,15 +148,10 @@ export default function CreateProject() {
 
       <main className="mx-auto max-w-6xl px-7 pb-10 pt-8">
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-          <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
-            <div>
-              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                <Sparkles size={13} />
-                {t('app_title')}
-              </div>
+            <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+              <div>
               <h1 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">{t('quest_log')}</h1>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t('quest_sub')}</p>
-            </div>
+              </div>
 
             <button
               onClick={() => setShowNew(true)}

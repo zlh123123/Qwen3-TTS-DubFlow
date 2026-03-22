@@ -429,9 +429,6 @@ export default function SettingsModal({ open, close }) {
           </div>
 
           <div className="mt-4 border-t border-slate-200 pt-4 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
-            <div className="mb-3 rounded-lg bg-slate-100 px-3 py-2 dark:bg-slate-700/70">
-              {isZh ? '已启用自动保存，无需手动保存' : 'Autosave enabled, manual save not required'}
-            </div>
             <a
               href="https://github.com/zlh123123/Qwen3-TTS-DubFlow"
               target="_blank"

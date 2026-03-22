@@ -1,12 +1,14 @@
-import React, { useState, useRef } from 'react';
-import { X, Upload, BookOpen, FileText, Plus, Wand2, RefreshCw, Trash2 } from 'lucide-react';
+import React, { useMemo, useRef, useState } from 'react';
+import { X, Upload, FileText, Plus, Trash2, Loader2, Type } from 'lucide-react';
 import * as API from '../api/endpoints';
 import { useLang } from '../contexts/LanguageContext';
 
 export default function CreateProjectModal({ open, close, onCreated }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
+  const isZh = lang === 'zh-CN';
   const [title, setTitle] = useState('');
-  const [filesData, setFilesData] = useState([]); // 存储 { name: string, content: string }
+  const [filesData, setFilesData] = useState([]);
+  const [manualText, setManualText] = useState('');
   const [loading, setLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
@@ -14,23 +16,23 @@ export default function CreateProjectModal({ open, close, onCreated }) {
   const handleClose = () => {
     setTitle('');
     setFilesData([]);
+    setManualText('');
     setLoading(false);
     close();
   };
 
-  // 处理文件读取
   const handleFiles = (files) => {
-    const newFiles = Array.from(files).filter(f => f.name.endsWith('.txt'));
-    if (newFiles.length === 0) return; 
+    const newFiles = Array.from(files).filter((f) => f.name.toLowerCase().endsWith('.txt'));
+    if (newFiles.length === 0) return;
 
     if (!title && newFiles.length > 0) {
       setTitle(newFiles[0].name.replace('.txt', ''));
     }
 
-    newFiles.forEach(file => {
+    newFiles.forEach((file) => {
       const reader = new FileReader();
       reader.onload = (e) => {
-        setFilesData(prev => [
+        setFilesData((prev) => [
           ...prev,
           { name: file.name, content: e.target.result }
         ]);
@@ -40,15 +42,34 @@ export default function CreateProjectModal({ open, close, onCreated }) {
   };
 
   const removeFile = (index) => {
-    setFilesData(prev => prev.filter((_, i) => i !== index));
+    setFilesData((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const mergedContent = useMemo(() => {
+    const filePart = filesData
+      .map((f) => `--- File: ${f.name} ---\n${f.content || ''}`)
+      .join('\n\n');
+    const manualPart = manualText.trim()
+      ? `--- Manual Input ---\n${manualText.trim()}`
+      : '';
+
+    if (filePart && manualPart) return `${filePart}\n\n${manualPart}`;
+    return filePart || manualPart;
+  }, [filesData, manualText]);
+
+  const textLength = useMemo(() => mergedContent.length, [mergedContent]);
+  const estimatedMinutes = useMemo(() => {
+    if (!textLength) return 0;
+    return Math.max(1, Math.round(textLength / 220));
+  }, [textLength]);
+
+  const canCreate = !!title.trim() && !!mergedContent.trim() && !loading;
+
   const handleCreate = async () => {
-    if (filesData.length === 0 || !title.trim()) return;
+    if (!canCreate) return;
     setLoading(true);
 
     try {
-      const mergedContent = filesData.map(f => `--- File: ${f.name} ---\n${f.content}`).join('\n\n');
       const res = await API.createProject({
         name: title.trim(),
         content: mergedContent
@@ -56,13 +77,10 @@ export default function CreateProjectModal({ open, close, onCreated }) {
 
       const d = res?.data || res;
       if (d && d.id) {
-        // 立即调用角色分析
         const analyzeResponse = await API.analyzeCharacters(d.id);
-        console.log('角色分析任务ID:', analyzeResponse.task_id);
+        console.log('Character analyze task id:', analyzeResponse.task_id);
 
-        // 更新项目状态为 analyzing
         d.state = 'analyzing_characters';
-
         onCreated(d);
         handleClose();
       }
@@ -76,86 +94,158 @@ export default function CreateProjectModal({ open, close, onCreated }) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
-      <div className="genshin-card w-full max-w-2xl bg-[#ECE5D8] dark:bg-[#1B1D22] border-[3px] border-[#D3BC8E] p-0 flex flex-col max-h-[90vh] overflow-hidden shadow-2xl rounded-[2rem]">
-
-        {/* Header */}
-        <div className="px-6 py-4 flex justify-between items-center bg-[#3B4255] text-[#ECE5D8] border-b-2 border-[#D3BC8E]/30">
-          <h2 className="text-xl font-genshin font-bold flex items-center gap-2 tracking-widest uppercase">
-            <BookOpen className="text-[#D3BC8E]" size={22} /> {t('new_quest')}
-          </h2>
-          <button onClick={handleClose} className="text-[#D3BC8E] hover:rotate-90 transition-transform p-1"><X size={24} /></button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4 backdrop-blur-[2px]">
+      <div className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_28px_70px_rgba(2,12,27,0.38)] dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-700">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{t('new_quest')}</h2>
+          <button
+            onClick={handleClose}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+          >
+            <X size={18} />
+          </button>
         </div>
 
-        <div className="p-8 overflow-y-auto flex-1 space-y-6 custom-scrollbar">
-          {/* 项目名称 */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-[#8C7D6B] uppercase tracking-widest flex items-center gap-1">
-              {t('project_codename')}
+        <div className="custom-scrollbar flex-1 space-y-5 overflow-y-auto bg-slate-50/50 p-6 dark:bg-slate-900/30">
+          <div>
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              {isZh ? '项目名称' : 'Project Name'}
             </label>
             <input
-              className="genshin-input w-full p-4 font-bold text-lg"
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base font-medium text-slate-800 outline-none transition focus:border-blue-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
               value={title}
-              onChange={e => setTitle(e.target.value)}
+              onChange={(e) => setTitle(e.target.value)}
               placeholder={t('project_codename')}
             />
           </div>
 
-          {/* 文件上传区域 */}
-          <div className="space-y-4">
-            <label className="text-xs font-bold text-[#8C7D6B] uppercase tracking-widest">{t('resources_label')}</label>
-
+          <div>
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              {t('resources_label')}
+            </label>
             <div
               onClick={() => fileInputRef.current.click()}
-              onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
-              onDragLeave={e => { e.preventDefault(); setIsDragging(false); }}
-              onDrop={e => { e.preventDefault(); setIsDragging(false); handleFiles(e.dataTransfer.files); }}
-              className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all flex flex-col items-center gap-2 ${isDragging ? 'border-[#D3BC8E] bg-[#D3BC8E]/10' : 'border-[#D8CBA8] bg-[#F7F3EB]/50 dark:bg-white/5 hover:border-[#D3BC8E]'
-                }`}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                setIsDragging(false);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDragging(false);
+                handleFiles(e.dataTransfer.files);
+              }}
+              className={`cursor-pointer rounded-xl border-2 border-dashed px-5 py-8 text-center transition ${
+                isDragging
+                  ? 'border-blue-400 bg-blue-50/70 dark:bg-blue-900/20'
+                  : 'border-slate-300 bg-white hover:border-slate-400 dark:border-slate-700 dark:bg-slate-800'
+              }`}
             >
-              <input type="file" ref={fileInputRef} className="hidden" accept=".txt" multiple onChange={e => handleFiles(e.target.files)} />
-              <Upload size={32} className="text-[#D3BC8E] opacity-70" />
-              <p className="text-[#8C7D6B] font-bold text-sm">{t('upload_ph')}</p>
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept=".txt"
+                multiple
+                onChange={(e) => handleFiles(e.target.files)}
+              />
+              <Upload size={22} className="mx-auto mb-2 text-slate-500" />
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{t('upload_ph')}</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">.txt</p>
             </div>
+          </div>
 
-            {/* 文件名列表 */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {filesData.map((file, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3 bg-white/60 dark:bg-black/20 border border-[#D3BC8E]/30 rounded-xl animate-scale-in">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <FileText size={18} className="text-[#D3BC8E] shrink-0" />
-                    <span className="text-sm font-bold text-[#495366] dark:text-[#ECE5D8] truncate">{file.name}</span>
-                  </div>
-                  <button
-                    onClick={() => removeFile(idx)}
-                    className="text-gray-400 hover:text-red-500 transition-colors p-1"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+          {(filesData.length > 0 || manualText.trim()) && (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div className="rounded-xl border border-slate-200 bg-white p-3 text-sm dark:border-slate-700 dark:bg-slate-800">
+                <span className="text-slate-500 dark:text-slate-400">{t('word_count')}</span>
+                <div className="mt-1 text-xl font-semibold text-slate-900 dark:text-slate-100">{textLength}</div>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-3 text-sm dark:border-slate-700 dark:bg-slate-800">
+                <span className="text-slate-500 dark:text-slate-400">{t('est_time')}</span>
+                <div className="mt-1 text-xl font-semibold text-slate-900 dark:text-slate-100">
+                  {isZh ? `${estimatedMinutes} 分钟` : `${estimatedMinutes} min`}
                 </div>
-              ))}
-              {filesData.length > 0 && (
+              </div>
+            </div>
+          )}
+
+          {filesData.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  {isZh ? '已上传文件' : 'Uploaded Files'}
+                </label>
                 <button
                   onClick={() => fileInputRef.current.click()}
-                  className="flex items-center justify-center gap-2 p-3 border-2 border-dashed border-[#D8CBA8] rounded-xl text-[#8C7D6B] hover:bg-[#D3BC8E]/10 transition-all text-sm font-bold"
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 >
-                  <Plus size={16} /> {t('add_more')}
+                  <Plus size={12} />
+                  {t('add_more')}
                 </button>
-              )}
+              </div>
+              <div className="space-y-2">
+                {filesData.map((file, idx) => (
+                  <div
+                    key={`${file.name}-${idx}`}
+                    className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800"
+                  >
+                    <div className="mr-2 flex min-w-0 items-center gap-2">
+                      <FileText size={15} className="shrink-0 text-slate-500" />
+                      <span className="truncate text-sm text-slate-700 dark:text-slate-200">{file.name}</span>
+                    </div>
+                    <button
+                      onClick={() => removeFile(idx)}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
+          )}
+
+          <div>
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              <span className="inline-flex items-center gap-1.5">
+                <Type size={13} />
+                {t('manual_input')}
+              </span>
+            </label>
+            <textarea
+              value={manualText}
+              onChange={(e) => setManualText(e.target.value)}
+              placeholder={isZh ? '可直接粘贴文本内容，不上传文件也能创建项目。' : 'Paste text directly. You can create a project without uploading files.'}
+              rows={6}
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            />
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="p-6 bg-[#3B4255]/5 dark:bg-black/20 flex justify-end gap-6 items-center border-t-2 border-[#D3BC8E]/10">
-          <button onClick={handleClose} className="text-sm font-bold text-[#8C7D6B] hover:text-[#3B4255] transition-colors tracking-widest uppercase">{t('abandon')}</button>
-          <button
-            onClick={handleCreate}
-            disabled={loading || filesData.length === 0 || !title.trim()}
-            className="genshin-btn-primary px-12 py-3 shadow-xl flex items-center gap-3 font-genshin disabled:grayscale disabled:opacity-50"
-          >
-            {loading ? <RefreshCw className="animate-spin" size={20} /> : <><Wand2 size={20} /><span className="tracking-[0.2em]">{t('confirm')}</span></>}
-          </button>
+        <div className="flex items-center justify-between border-t border-slate-200 bg-white px-6 py-4 dark:border-slate-700 dark:bg-slate-900">
+          <div className="text-xs text-slate-500 dark:text-slate-400">
+            {isZh ? '创建后将自动进入角色分析流程。' : 'Character analysis starts automatically after creation.'}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleClose}
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            >
+              {t('abandon')}
+            </button>
+            <button
+              onClick={handleCreate}
+              disabled={!canCreate}
+              className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-45 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
+            >
+              {loading ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
+              {t('confirm')}
+            </button>
+          </div>
         </div>
       </div>
     </div>
