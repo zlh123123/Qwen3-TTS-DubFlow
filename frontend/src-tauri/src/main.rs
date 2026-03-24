@@ -7,6 +7,7 @@ fn main() {
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 

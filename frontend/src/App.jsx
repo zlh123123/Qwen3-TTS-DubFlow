@@ -4,6 +4,7 @@ import CreateProject from './pages/CreateProject';
 import Workshop from './pages/Workshop';
 import Studio from './pages/Studio';
 import AssetsLibrary from './pages/AssetsLibrary';
+import TimelineBoard from './pages/TimelineBoard';
 import DesktopSidebar from './components/DesktopSidebar';
 import SettingsModal from './components/SettingsModal';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -24,6 +25,7 @@ export default function App() {
             {/* URL带上 projectId，方便刷新后保持状态 */}
             <Route path="/project/:pid/workshop" element={<Workshop />} />
             <Route path="/project/:pid/studio" element={<Studio />} />
+            <Route path="/project/:pid/timeline" element={<TimelineBoard />} />
             <Route path="/project/:pid/assets" element={<AssetsLibrary />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Home, Users, Clapperboard, FolderOpen, Settings } from 'lucide-react';
+import { Home, Users, Mic2, Clapperboard, FolderOpen, Settings } from 'lucide-react';
 
 export default function DesktopSidebar({ onOpenSettings }) {
   const location = useLocation();
@@ -29,9 +29,17 @@ export default function DesktopSidebar({ onOpenSettings }) {
     {
       key: 'studio',
       label: '演播室',
-      icon: Clapperboard,
+      icon: Mic2,
       active: location.pathname.includes('/studio'),
       onClick: () => pid && nav(`/project/${pid}/studio`),
+      disabled: !pid,
+    },
+    {
+      key: 'timeline',
+      label: '剪辑台',
+      icon: Clapperboard,
+      active: location.pathname.includes('/timeline'),
+      onClick: () => pid && nav(`/project/${pid}/timeline`),
       disabled: !pid,
     },
     {

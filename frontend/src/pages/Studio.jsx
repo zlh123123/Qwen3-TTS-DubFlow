@@ -1,301 +1,594 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { 
-  Play, RefreshCw, Layers, Plus, Trash2, Zap, 
-  Edit, Volume2, ChevronLeft, Home 
+import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import {
+  ChevronLeft,
+  Search,
+  Plus,
+  Trash2,
+  Loader2,
+  Save,
+  Sparkles,
+  FolderOpen,
+  Clapperboard,
+  AlertCircle,
 } from 'lucide-react';
 import { useTaskPoller } from '../hooks/useTaskPoller';
 import * as API from '../api/endpoints';
 import { useLang } from '../contexts/LanguageContext';
 
+const asArray = (value) => (Array.isArray(value) ? value : value?.data || []);
+const ROW_HEIGHT = 104;
+const ROW_OVERSCAN = 8;
+
+const estimateDuration = (text, speed) => {
+  const content = (text || '').trim();
+  if (!content) return 0.8;
+  const safeSpeed = speed && speed > 0 ? speed : 1;
+  return Math.max(0.8, content.length / (6.5 * safeSpeed));
+};
+
+const formatSeconds = (seconds) => `${Math.max(0, Number(seconds || 0)).toFixed(1)}s`;
+
+const lineStatusClass = (status) => {
+  if (status === 'synthesized') return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-400/20 dark:text-emerald-300';
+  if (status === 'processing') return 'bg-blue-100 text-blue-700 dark:bg-blue-400/20 dark:text-blue-300';
+  if (status === 'failed') return 'bg-red-100 text-red-700 dark:bg-red-400/20 dark:text-red-300';
+  return 'bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300';
+};
+
+const resolveAudioUrl = (path) => {
+  if (!path) return null;
+  if (path.startsWith('http') || path.startsWith('file://')) return path;
+  if (path.startsWith('/static/')) return `http://127.0.0.1:8000${path}`;
+  if (path.startsWith('/')) return `file://${path}`;
+  return `http://127.0.0.1:8000/static/${path}`;
+};
+
 export default function Studio() {
-  const { t } = useLang();
+  const { lang } = useLang();
+  const isZh = lang === 'zh-CN';
   const { pid } = useParams();
   const nav = useNavigate();
-  
-  // 数据存取
-  const [lines, setLines] = useState([]);
-  const [chars, setChars] = useState([]);
-  const [actID, setActID] = useState(null); // 当前选中的行ID
-  const [filters, setFilters] = useState({ onlyPending: true });
-  const [loading, setLoading] = useState(true);
-  
   const { startPolling } = useTaskPoller();
 
-  // 初始化拉取数据
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const [cRes, sRes] = await Promise.all([
-          API.getCharacters(pid),
-          API.getScript(pid)
-        ]);
-        setChars(cRes?.data || cRes || []);
-        setLines(sRes?.data || sRes || []);
-      } catch (e) {
-        console.error("数据加载失败:", e);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadData();
-  }, [pid]);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState('');
+  const [lines, setLines] = useState([]);
+  const [chars, setChars] = useState([]);
+  const [activeLineId, setActiveLineId] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [onlyPending, setOnlyPending] = useState(false);
+  const [dirtyIds, setDirtyIds] = useState([]);
+  const [savingLineId, setSavingLineId] = useState('');
+  const [synthLineId, setSynthLineId] = useState('');
+  const [synthAllLoading, setSynthAllLoading] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
-  // 获取当前选中的行数据
-  const activeLine = lines.find(l => l.id === actID) || null;
+  const listRef = useRef(null);
+  const [listScrollTop, setListScrollTop] = useState(0);
+  const [listViewportHeight, setListViewportHeight] = useState(0);
 
-  // --- 业务逻辑 ---
-  
-  // 乐观更新本地状态
-  const mutate = (id, payload) => {
-    setLines(prev => prev.map(l => l.id === id ? { ...l, ...payload } : l));
-  };
+  const deferredSearchTerm = useDeferredValue(searchTerm);
 
-  const handleAddLine = async (prevId) => {
-    try {
-      const res = await API.addLine(pid, prevId);
-      const newLine = res?.data || res;
-      const idx = lines.findIndex(l => l.id === prevId);
-      const newArr = [...lines];
-      newArr.splice(idx + 1, 0, newLine);
-      setLines(newArr);
-      setActID(newLine.id);
-    } catch (e) {
-      alert(t('msg_add_fail'));
-    }
-  };
-
-  const handleDelLine = async (e, id) => {
-    e.stopPropagation();
-    if (!window.confirm(t('msg_del_confirm'))) return;
-    setLines(prev => prev.filter(l => l.id !== id));
-    API.deleteLine(id); // 后台异步删
-    if (actID === id) setActID(null);
-  };
-
-  const handleSynth = async (id) => {
-    mutate(id, { status: 'processing' });
-    try {
-      const res = await API.synthesize({ project_id: pid, line_ids: [id] });
-      const taskId = res?.task_id || res?.data?.task_id;
-      if (!taskId) throw new Error('task_id missing');
-      startPolling(taskId, (result) => {
-        mutate(id, { status: 'synthesized', audio_url: result.audio_url });
-      });
-    } catch (e) {
-      mutate(id, { status: 'failed' });
-    }
-  };
-
-  const handleBatch = async () => {
-    const targetIds = lines
-      .filter(l => (filters.onlyPending ? l.status !== 'synthesized' : true))
-      .map(l => l.id);
-    
-    if (targetIds.length === 0) return;
-
-    setLines(prev => prev.map(l => targetIds.includes(l.id) ? { ...l, status: 'processing' } : l));
-    const res = await API.synthesize({ project_id: pid, line_ids: targetIds });
-    const taskId = res?.task_id || res?.data?.task_id;
-    if (!taskId) throw new Error('task_id missing');
-    startPolling(taskId, () => {
-      alert(t('msg_batch_done'));
-      // 实际开发中此处通常会重新请求一次 getScript 刷新全部音频状态
-    });
-  };
-
-  if (loading) return (
-    <div className="h-screen flex items-center justify-center text-[#D3BC8E] font-bold bg-[#F0F2F5]">
-      {t('loading')}
-    </div>
+  const orderedLines = useMemo(
+    () => [...lines].sort((a, b) => (a.order_index || 0) - (b.order_index || 0)),
+    [lines]
   );
 
+  const charMap = useMemo(() => {
+    const map = new Map();
+    chars.forEach((item) => map.set(item.id, item.name));
+    return map;
+  }, [chars]);
+
+  const filteredLines = useMemo(() => {
+    let result = [...orderedLines];
+    if (onlyPending) result = result.filter((line) => line.status !== 'synthesized');
+    const q = deferredSearchTerm.trim().toLowerCase();
+    if (q) {
+      result = result.filter((line) => (line.text || '').toLowerCase().includes(q));
+    }
+    return result;
+  }, [orderedLines, onlyPending, deferredSearchTerm]);
+
+  const activeLine = useMemo(
+    () => lines.find((line) => line.id === activeLineId) || null,
+    [lines, activeLineId]
+  );
+
+  const stats = useMemo(() => {
+    const total = orderedLines.length;
+    const done = orderedLines.filter((line) => line.status === 'synthesized').length;
+    return { total, done, pending: total - done };
+  }, [orderedLines]);
+
+  const refreshData = async (silent = false) => {
+    if (!silent) setLoading(true);
+    try {
+      const [charsRes, scriptRes] = await Promise.all([
+        API.getCharacters(pid),
+        API.getScript(pid),
+      ]);
+      const nextChars = asArray(charsRes);
+      const nextLines = asArray(scriptRes).sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+      setChars(nextChars);
+      setLines(nextLines);
+      setDirtyIds((prev) => prev.filter((id) => nextLines.some((line) => line.id === id)));
+      setActiveLineId((prev) => {
+        if (prev && nextLines.some((line) => line.id === prev)) return prev;
+        return nextLines[0]?.id || null;
+      });
+    } catch (err) {
+      console.error('Load studio data failed:', err);
+      setNotice(isZh ? '演播室数据加载失败。' : 'Failed to load studio data.');
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refreshData();
+  }, [pid]);
+
+  useEffect(() => {
+    if (!notice) return undefined;
+    const timer = setTimeout(() => setNotice(''), 2200);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
+  useEffect(() => {
+    if (!listRef.current) return undefined;
+    const el = listRef.current;
+    const sync = () => setListViewportHeight(el.clientHeight);
+    sync();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', sync);
+      return () => window.removeEventListener('resize', sync);
+    }
+
+    const observer = new ResizeObserver(sync);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const totalRows = filteredLines.length;
+  const startIndex = Math.max(0, Math.floor(listScrollTop / ROW_HEIGHT) - ROW_OVERSCAN);
+  const visibleCount = Math.ceil((listViewportHeight || 1) / ROW_HEIGHT) + ROW_OVERSCAN * 2;
+  const endIndex = Math.min(totalRows, startIndex + visibleCount);
+  const visibleLines = filteredLines.slice(startIndex, endIndex);
+  const topSpacer = startIndex * ROW_HEIGHT;
+  const bottomSpacer = Math.max(0, (totalRows - endIndex) * ROW_HEIGHT);
+
+  const markDirty = (lineId) => {
+    setDirtyIds((prev) => (prev.includes(lineId) ? prev : [...prev, lineId]));
+  };
+
+  const clearDirty = (lineId) => {
+    setDirtyIds((prev) => prev.filter((id) => id !== lineId));
+  };
+
+  const patchLine = (lineId, patch) => {
+    setLines((prev) => prev.map((line) => (line.id === lineId ? { ...line, ...patch } : line)));
+  };
+
+  const saveLine = async (lineId, silent = false) => {
+    const target = lines.find((line) => line.id === lineId);
+    if (!target) return;
+    setSavingLineId(lineId);
+    try {
+      await API.updateLine(lineId, {
+        text: target.text || '',
+        character_id: target.character_id || null,
+        speed: Number(target.speed || 1),
+      });
+      clearDirty(lineId);
+      if (!silent) setNotice(isZh ? '已保存。' : 'Saved.');
+    } catch (err) {
+      console.error('Save line failed:', err);
+      setNotice(isZh ? '保存失败。' : 'Save failed.');
+    } finally {
+      setSavingLineId('');
+    }
+  };
+
+  const addLine = async () => {
+    try {
+      const created = await API.addLine(pid, activeLineId || orderedLines[orderedLines.length - 1]?.id || null);
+      const row = created?.data || created;
+      await refreshData(true);
+      if (row?.id) setActiveLineId(row.id);
+      setNotice(isZh ? '已新增台词。' : 'Line added.');
+    } catch (err) {
+      console.error('Add line failed:', err);
+      setNotice(isZh ? '新增失败。' : 'Failed to add line.');
+    }
+  };
+
+  const deleteActiveLine = async () => {
+    if (!activeLine) return;
+    try {
+      await API.deleteLine(activeLine.id);
+      setDeleteConfirmOpen(false);
+      await refreshData(true);
+      setNotice(isZh ? '台词已删除。' : 'Line deleted.');
+    } catch (err) {
+      console.error('Delete line failed:', err);
+      setNotice(isZh ? '删除失败。' : 'Delete failed.');
+    }
+  };
+
+  const synthesizeLines = async (lineIds, singleId = null) => {
+    const ids = Array.from(new Set(lineIds.filter(Boolean)));
+    if (ids.length === 0) return;
+
+    if (singleId) setSynthLineId(singleId);
+    else setSynthAllLoading(true);
+
+    try {
+      const dirtyTargets = ids.filter((id) => dirtyIds.includes(id));
+      for (const lineId of dirtyTargets) {
+        // eslint-disable-next-line no-await-in-loop
+        await saveLine(lineId, true);
+      }
+
+      setLines((prev) => prev.map((line) => (ids.includes(line.id) ? { ...line, status: 'processing' } : line)));
+      const resp = await API.synthesize({ project_id: pid, line_ids: ids });
+      const taskId = resp?.task_id || resp?.data?.task_id;
+      if (taskId) {
+        startPolling(taskId, async () => {
+          await refreshData(true);
+          setSynthLineId('');
+          setSynthAllLoading(false);
+          setNotice(singleId ? (isZh ? '该条合成完成。' : 'Line synthesized.') : (isZh ? '全部待处理已合成。' : 'All pending synthesized.'));
+        });
+      } else {
+        await refreshData(true);
+        setSynthLineId('');
+        setSynthAllLoading(false);
+      }
+    } catch (err) {
+      console.error('Synthesis failed:', err);
+      await refreshData(true);
+      setSynthLineId('');
+      setSynthAllLoading(false);
+      setNotice(isZh ? '合成失败，请检查后端。' : 'Synthesis failed.');
+    }
+  };
+
+  const synthesizeActive = () => {
+    if (!activeLine) return;
+    void synthesizeLines([activeLine.id], activeLine.id);
+  };
+
+  const synthesizeAllPending = () => {
+    const pendingIds = orderedLines.filter((line) => line.status !== 'synthesized').map((line) => line.id);
+    void synthesizeLines(pendingIds);
+  };
+
+  const activeAudioUrl = resolveAudioUrl(activeLine?.audio_url || activeLine?.audio_path);
+  const activeDuration = activeLine ? (activeLine.duration ?? estimateDuration(activeLine.text, activeLine.speed || 1)) : 0;
+
+  if (loading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-slate-100 text-slate-700 dark:bg-[#000000] dark:text-[#d8d8d8]">
+        <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold dark:border-[#2f2f2f] dark:bg-[#121212]">
+          <Loader2 size={16} className="animate-spin" />
+          {isZh ? '加载演播室...' : 'Loading Studio...'}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="h-screen w-full flex flex-col text-[#495366] overflow-hidden bg-[#F0F2F5]">
-      
-      {/* 顶部菜单栏 */}
-      <header className="px-8 py-4 z-20 shrink-0">
-        <div className="paimon-menu px-6 py-3 flex justify-between items-center bg-white/90 border-2 border-[#D8CBA8] shadow-sm">
-          
-          <div className="flex items-center gap-3">
-            <button onClick={() => nav(-1)} className="hover:bg-[#F7F3EB] p-2 rounded-full transition text-[#8C7D6B]">
-              <ChevronLeft size={24} />
-            </button>
-            <div className="w-10 h-10 bg-[#D3BC8E] rounded-full flex items-center justify-center text-white border-2 border-white shadow">
-              <Layers size={20}/>
-            </div>
-            <div>
-              <h1 className="font-genshin font-bold text-lg text-[#3B4255] leading-tight">{t('studio_title')}</h1>
-              <div className="text-[10px] text-gray-400 font-sans tracking-tighter">PID: {pid}</div>
+    <div className="h-screen flex flex-col overflow-hidden bg-slate-100 text-slate-700 dark:bg-[#000000] dark:text-[#d8d8d8]">
+      {!!notice && (
+        <div className="fixed left-1/2 top-6 z-50 -translate-x-1/2">
+          <div className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 shadow-sm dark:border-[#6b562e] dark:bg-[#2b2314] dark:text-[#efd29c]">
+            <AlertCircle size={14} />
+            <span>{notice}</span>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl dark:border-[#2d2d2d] dark:bg-[#101010]">
+            <h3 className="text-base font-semibold text-slate-900 dark:text-[#f0f0f0]">
+              {isZh ? '删除当前台词' : 'Delete Current Line'}
+            </h3>
+            <p className="mt-2 text-sm text-slate-600 dark:text-[#b8b8b8]">
+              {isZh ? '删除后不可恢复，确认继续吗？' : 'This cannot be undone. Continue?'}
+            </p>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setDeleteConfirmOpen(false)}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-[#343434] dark:bg-[#1b1b1b] dark:text-[#e0e0e0] dark:hover:bg-[#242424]"
+              >
+                {isZh ? '取消' : 'Cancel'}
+              </button>
+              <button
+                onClick={deleteActiveLine}
+                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
+              >
+                {isZh ? '确认删除' : 'Delete'}
+              </button>
             </div>
           </div>
-          
-          {/* 中间筛选与批量按钮 */}
-          <div className="flex items-center gap-4 bg-[#F7F3EB] px-4 py-1.5 rounded-full border border-[#EBE5D9]">
-             <label className="flex items-center gap-2 text-xs font-bold text-[#8C7D6B] cursor-pointer pr-4 border-r border-[#D8CBA8]">
-               <input 
-                 type="checkbox" 
-                 checked={filters.onlyPending} 
-                 onChange={e => setFilters({ ...filters, onlyPending: e.target.checked })} 
-                 className="accent-[#D3BC8E] w-4 h-4"
-               />
-               <span>{t('chk_skip')}</span>
-             </label>
-             <button onClick={handleBatch} className="text-[#3B4255] hover:text-[#D3BC8E] text-xs font-bold flex items-center gap-1 transition-colors">
-               <Zap size={14} className="fill-[#D3BC8E] text-[#D3BC8E]"/> {t('btn_batch')}
-             </button>
+        </div>
+      )}
+
+      <header className="shrink-0 border-b border-slate-200 bg-white px-6 py-3 dark:border-[#202020] dark:bg-[#090909]">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              onClick={() => nav(`/project/${pid}/workshop`)}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-100 dark:border-[#333333] dark:bg-[#151515] dark:text-[#dddddd] dark:hover:bg-[#1f1f1f]"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <div className="min-w-0">
+              <h1 className="truncate text-xl font-semibold text-slate-900 dark:text-[#f0f0f0]">
+                {isZh ? '演播室' : 'Studio'}
+              </h1>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-[#a1a1a1]">
+                {isZh
+                  ? `仅用于台词编辑与合成 · 共 ${stats.total} 条 · 已合成 ${stats.done} 条`
+                  : `Script editing & synthesis only · ${stats.done}/${stats.total} done`}
+              </p>
+            </div>
           </div>
 
-          {/* 右侧完成按钮 */}
-          <button 
-            onClick={() => nav('/')} 
-            className="px-6 py-1.5 rounded-full border-2 border-[#D3BC8E] text-[#8C7D6B] font-bold bg-[#F7F3EB]/50 hover:bg-[#fff] transition-all flex items-center gap-2 active:scale-95 shadow-sm text-sm"
-          >
-            <Home size={16} /> <span className="pt-0.5">{t('finish')}</span>
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              onClick={() => nav(`/project/${pid}/assets`)}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-[#333333] dark:bg-[#151515] dark:text-[#e2e2e2] dark:hover:bg-[#1f1f1f]"
+            >
+              <FolderOpen size={14} />
+              {isZh ? '素材库' : 'Assets'}
+            </button>
+            <button
+              onClick={() => nav(`/project/${pid}/timeline`)}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-[#333333] dark:bg-[#151515] dark:text-[#e2e2e2] dark:hover:bg-[#1f1f1f]"
+            >
+              <Clapperboard size={14} />
+              {isZh ? '剪辑台' : 'Timeline'}
+            </button>
+            <button
+              onClick={synthesizeAllPending}
+              disabled={synthAllLoading || stats.pending === 0}
+              className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-45 dark:bg-[#f2f2f2] dark:text-[#111111] dark:hover:bg-[#d8d8d8]"
+            >
+              {synthAllLoading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+              {isZh ? '合成全部待处理' : 'Synthesize Pending'}
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* 三栏主体 */}
-      <main className="flex-1 px-8 pb-8 grid grid-cols-12 gap-8 min-h-0">
-        
-        {/* 左：演员名单 */}
-        <aside className="col-span-2 bg-white/80 border-2 border-[#EBE5D9] rounded-[2rem] flex flex-col overflow-hidden shadow-sm">
-          <div className="p-3 bg-[#F9F7F4] font-bold text-[#8C7D6B] text-xs text-center border-b border-[#EBE5D9] tracking-widest">{t('cast_list')}</div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
-            {chars.map(c => (
-              <div key={c.id} className="flex flex-col items-center p-3 rounded-2xl bg-[#F7F3EB] border border-transparent hover:border-[#D3BC8E] transition-all">
-                <div className="text-3xl mb-1">{c.avatar || '👤'}</div>
-                <div className="text-xs font-bold text-[#3B4255] truncate w-full text-center">{c.name}</div>
-              </div>
-            ))}
-          </div>
-        </aside>
-
-        {/* 中：剧本回顾流水 */}
-        <section className="col-span-7 flex flex-col overflow-hidden relative">
-           <div className="absolute inset-0 bg-[#EBE5D9]/30 rounded-[2rem] border-2 border-[#D8CBA8]/50 pointer-events-none"></div>
-           
-           <div className="flex-1 overflow-y-auto p-6 space-y-6 pb-24 scroll-smooth custom-scrollbar relative z-10">
-              {lines.map((l) => (
-                <div 
-                  key={l.id} 
-                  onClick={() => setActID(l.id)} 
-                  className={`flex gap-4 p-5 rounded-[1.5rem] cursor-pointer transition-all border-2 relative group ${
-                    actID === l.id ? 'bg-white border-[#D3BC8E] shadow-md scale-[1.01]' : 'bg-white/60 border-transparent hover:bg-white'
-                  }`}
-                >
-                    <div className="relative shrink-0 flex flex-col items-center gap-1 pt-1">
-                       <div className="w-12 h-12 bg-[#3B4255] rounded-full flex items-center justify-center text-2xl border-2 border-[#D3BC8E] shadow-sm z-10 overflow-hidden">
-                         {chars.find(c => c.id === l.character_id)?.avatar || '👤'}
-                       </div>
-                    </div>
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-bold text-[#D3BC8E] mb-1 ml-1 uppercase tracking-wider">
-                        {chars.find(c => c.id === l.character_id)?.name || 'Unknown'}
-                      </div>
-                      <div className="text-[#3B4255] text-base font-medium leading-relaxed bg-[#F7F3EB] px-4 py-2 rounded-xl rounded-tl-none border border-[#EBE5D9] shadow-inner">
-                        {l.text || "..."}
-                      </div>
-                      
-                      <div className="mt-2 flex items-center gap-2 h-8 ml-1">
-                          {l.status === 'processing' && (
-                             <span className="text-xs text-[#D3BC8E] flex gap-1 font-bold items-center">
-                               <RefreshCw size={12} className="animate-spin"/> {t('loading')}
-                             </span>
-                          )}
-                          {l.status === 'synthesized' && l.audio_url && (
-                             <div className="flex items-center gap-2 bg-white rounded-full pr-2 border border-[#EBE5D9]" onClick={e => e.stopPropagation()}>
-                                <button className="w-8 h-8 bg-[#D3BC8E] rounded-full flex justify-center items-center text-white hover:brightness-110 shadow-sm transition-all">
-                                  <Play size={14} fill="white" className="ml-0.5" />
-                                </button>
-                                <audio src={l.audio_url} controls className="h-6 w-24 opacity-60" />
-                             </div>
-                          )}
-                          {l.status !== 'processing' && (
-                             <button onClick={(e) => { e.stopPropagation(); handleSynth(l.id); }} className="text-[#A4AAB6] hover:text-[#D3BC8E] p-1 transition-all">
-                               <RefreshCw size={16} />
-                             </button>
-                          )}
-                      </div>
-                    </div>
-
-                    <div className="absolute right-2 top-4 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={(e) => handleDelLine(e, l.id)} className="p-2 bg-white rounded-full shadow text-[#FF7F7F] hover:scale-110 transition-transform">
-                        <Trash2 size={14} />
-                      </button>
-                      <button onClick={() => handleAddLine(l.id)} className="p-2 bg-white rounded-full shadow text-[#D3BC8E] hover:scale-110 transition-transform">
-                        <Plus size={14} />
-                      </button>
-                    </div>
-                </div>
-              ))}
-              
-              <button 
-                onClick={() => handleAddLine(lines[lines.length - 1]?.id)} 
-                className="w-full py-4 border-2 border-dashed border-[#D3BC8E]/50 rounded-[2rem] text-[#D3BC8E] font-bold hover:bg-white hover:border-[#D3BC8E] transition-all"
+      <main className="grid min-h-0 flex-1 grid-cols-12 gap-4 px-6 py-4">
+        <section className="col-span-4 min-h-0 overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-[#212121] dark:bg-[#090909]">
+          <div className="border-b border-slate-200 p-3 dark:border-[#212121]">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <input
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder={isZh ? '搜索台词...' : 'Search lines...'}
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm text-slate-700 outline-none transition focus:border-slate-400 dark:border-[#343434] dark:bg-[#121212] dark:text-[#e7e7e7]"
+              />
+            </div>
+            <div className="mt-2 flex items-center justify-between">
+              <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-[#a2a2a2]">
+                <input
+                  type="checkbox"
+                  checked={onlyPending}
+                  onChange={(event) => setOnlyPending(event.target.checked)}
+                  className="accent-slate-700"
+                />
+                {isZh ? '仅显示待合成' : 'Pending only'}
+              </label>
+              <button
+                onClick={addLine}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-[#343434] dark:bg-[#151515] dark:text-[#e4e4e4] dark:hover:bg-[#202020]"
               >
-                + {t('new_quest')}
+                <Plus size={12} />
+                {isZh ? '新增' : 'Add'}
               </button>
-           </div>
+            </div>
+          </div>
+
+          <div
+            ref={listRef}
+            onScroll={(event) => setListScrollTop(event.currentTarget.scrollTop)}
+            className="h-[calc(100%-89px)] overflow-y-auto p-3 custom-scrollbar"
+          >
+            {totalRows === 0 ? (
+              <div className="flex h-full items-center justify-center text-sm font-semibold text-slate-400 dark:text-[#777777]">
+                {isZh ? '无匹配台词' : 'No matching lines'}
+              </div>
+            ) : (
+              <div>
+                <div style={{ height: topSpacer }} />
+                <div className="space-y-2">
+                  {visibleLines.map((line) => {
+                    const active = line.id === activeLineId;
+                    const dirty = dirtyIds.includes(line.id);
+                    return (
+                      <button
+                        key={line.id}
+                        onClick={() => setActiveLineId(line.id)}
+                        className={`block h-[96px] w-full rounded-xl border p-3 text-left transition ${
+                          active
+                            ? 'border-slate-900 bg-slate-900 text-white dark:border-[#3f3f3f] dark:bg-[#171717]'
+                            : 'border-slate-200 bg-slate-50 hover:bg-white dark:border-[#2b2b2b] dark:bg-[#111111] dark:hover:bg-[#181818]'
+                        }`}
+                      >
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className={`text-[11px] font-semibold ${active ? 'text-slate-300' : 'text-slate-500 dark:text-[#9f9f9f]'}`}>
+                              #{line.order_index}
+                            </span>
+                            <span className="truncate text-xs font-semibold">
+                              {charMap.get(line.character_id) || (isZh ? '未指定角色' : 'No Speaker')}
+                            </span>
+                          </div>
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${lineStatusClass(line.status)}`}>
+                            {line.status || 'pending'}
+                          </span>
+                        </div>
+                        <p className={`line-clamp-2 text-sm leading-6 ${active ? 'text-slate-100' : 'text-slate-700 dark:text-[#dadada]'}`}>
+                          {line.text || (isZh ? '（空白台词）' : '(Empty line)')}
+                        </p>
+                        {dirty && (
+                          <div className="mt-1 text-[11px] font-semibold text-amber-500 dark:text-amber-300">
+                            {isZh ? '未保存' : 'Unsaved'}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ height: bottomSpacer }} />
+              </div>
+            )}
+          </div>
         </section>
 
-        {/* 右：参数面板 */}
-        <section className="col-span-3 bg-white/90 border-2 border-[#D8CBA8] rounded-[2rem] flex flex-col overflow-hidden shadow-sm">
-           <div className="p-4 bg-[#F9F7F4] border-b border-[#EBE5D9] font-bold text-[#8C7D6B] text-xs text-center tracking-widest">{t('params')}</div>
-           
-           {activeLine ? (
-             <div className="p-6 space-y-6 flex-1 overflow-y-auto custom-scrollbar">
-               <div className="space-y-2">
-                 <label className="text-xs font-bold text-[#D3BC8E] flex gap-1 items-center uppercase tracking-wider">
-                   <Edit size={12} /> {t('lbl_text')}
-                 </label>
-                 <textarea 
-                   className="w-full h-32 p-3 bg-[#F7F3EB] border-2 border-[#D8CBA8] rounded-xl text-[#3B4255] outline-none resize-none focus:border-[#D3BC8E] shadow-inner transition-colors" 
-                   value={activeLine.text || ''} 
-                   onChange={e => mutate(actID, { text: e.target.value })}
-                 />
-               </div>
-               
-               <div className="pt-4 border-t border-[#EBE5D9] space-y-4">
-                 <div>
-                   <label className="text-xs font-bold text-[#8C7D6B] mb-2 block uppercase tracking-wider">{t('lbl_speaker')}</label>
-                   <select 
-                     className="w-full p-2 bg-[#F7F3EB] border-2 border-[#EBE5D9] rounded-xl text-[#3B4255] outline-none focus:border-[#D3BC8E] transition-colors" 
-                     value={activeLine.character_id || ''} 
-                     onChange={e => mutate(actID, { character_id: parseInt(e.target.value) })}
-                   >
-                     {chars.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                   </select>
-                 </div>
+        <section className="col-span-8 min-h-0 overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-[#212121] dark:bg-[#090909]">
+          {!activeLine ? (
+            <div className="flex h-full items-center justify-center text-sm font-semibold text-slate-400 dark:text-[#757575]">
+              {isZh ? '请选择一条台词进行编辑与合成' : 'Select a line to edit and synthesize'}
+            </div>
+          ) : (
+            <div className="h-full overflow-y-auto p-5 custom-scrollbar">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-[#f0f0f0]">
+                    {isZh ? `台词 #${activeLine.order_index}` : `Line #${activeLine.order_index}`}
+                  </h2>
+                  <div className="mt-1 text-xs text-slate-500 dark:text-[#a2a2a2]">
+                    {isZh
+                      ? `角色：${charMap.get(activeLine.character_id) || '未指定'} · 时长：${formatSeconds(activeDuration)}`
+                      : `Speaker: ${charMap.get(activeLine.character_id) || 'Not set'} · ${formatSeconds(activeDuration)}`}
+                  </div>
+                </div>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${lineStatusClass(activeLine.status)}`}>
+                  {activeLine.status || 'pending'}
+                </span>
+              </div>
 
-                 <div>
-                    <div className="flex justify-between text-xs font-bold text-[#8C7D6B] mb-2 uppercase tracking-wider">
-                      <span>{t('lbl_speed')}</span>
-                      <span className="text-[#D3BC8E]">1.0x</span>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-[#a3a3a3]">
+                    {isZh ? '说话角色' : 'Speaker'}
+                  </label>
+                  <select
+                    value={activeLine.character_id || ''}
+                    onChange={(event) => {
+                      patchLine(activeLine.id, { character_id: event.target.value || null });
+                      markDirty(activeLine.id);
+                    }}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-blue-400 dark:border-[#343434] dark:bg-[#121212] dark:text-[#e6e6e6]"
+                  >
+                    <option value="">{isZh ? '未指定角色' : 'No Speaker'}</option>
+                    {chars.map((char) => (
+                      <option key={char.id} value={char.id}>
+                        {char.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-[#a3a3a3]">
+                    {isZh ? '语速' : 'Speed'}
+                  </label>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-[#343434] dark:bg-[#121212]">
+                    <div className="mb-1 flex items-center justify-between text-xs text-slate-500 dark:text-[#a1a1a1]">
+                      <span>{isZh ? '倍率' : 'Rate'}</span>
+                      <span className="font-semibold text-slate-700 dark:text-[#e6e6e6]">
+                        {Number(activeLine.speed || 1).toFixed(2)}x
+                      </span>
                     </div>
-                    <input type="range" className="w-full accent-[#D3BC8E] h-2 bg-[#EBE5D9] rounded-lg cursor-pointer" />
-                 </div>
-               </div>
-               
-               <div className="pt-4 mt-auto">
-                 <button 
-                   onClick={() => handleSynth(actID)} 
-                   className="genshin-btn-primary w-full py-3 shadow-lg flex justify-center items-center gap-2 font-genshin"
-                 >
-                   <RefreshCw size={18} /> {t('btn_update_play')}
-                 </button>
-               </div>
-             </div>
-           ) : (
-             <div className="flex-1 flex flex-col items-center justify-center text-[#D3BC8E] opacity-50 px-8 text-center">
-               <Volume2 size={64} strokeWidth={1} />
-               <p className="font-bold mt-4 font-genshin text-lg">{t('ph_bubble')}</p>
-             </div>
-           )}
-        </section>
+                    <input
+                      type="range"
+                      min={0.7}
+                      max={1.3}
+                      step={0.05}
+                      value={Number(activeLine.speed || 1)}
+                      onChange={(event) => {
+                        patchLine(activeLine.id, { speed: Number(event.target.value) });
+                        markDirty(activeLine.id);
+                      }}
+                      className="w-full accent-slate-700"
+                    />
+                  </div>
+                </div>
+              </div>
 
+              <div className="mt-4">
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-[#a3a3a3]">
+                  {isZh ? '台词文本' : 'Line Text'}
+                </label>
+                <textarea
+                  value={activeLine.text || ''}
+                  onChange={(event) => {
+                    patchLine(activeLine.id, { text: event.target.value });
+                    markDirty(activeLine.id);
+                  }}
+                  className="h-[260px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-7 text-slate-800 outline-none transition focus:border-blue-400 dark:border-[#343434] dark:bg-[#121212] dark:text-[#e6e6e6]"
+                />
+              </div>
+
+              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-[#2f2f2f] dark:bg-[#101010]">
+                <div className="mb-2 text-xs font-semibold text-slate-500 dark:text-[#a1a1a1]">
+                  {isZh ? '试听' : 'Preview'}
+                </div>
+                {activeAudioUrl ? (
+                  <audio src={activeAudioUrl} controls className="h-10 w-full" />
+                ) : (
+                  <div className="flex h-10 items-center justify-center rounded-lg border border-dashed border-slate-300 text-xs font-semibold text-slate-400 dark:border-[#3f3f3f] dark:text-[#8a8a8a]">
+                    {isZh ? '尚无可播放音频，先合成当前台词' : 'No audio yet. Synthesize this line first.'}
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-5 flex items-center justify-between">
+                <div className="text-xs font-semibold text-slate-500 dark:text-[#a3a3a3]">
+                  {dirtyIds.includes(activeLine.id)
+                    ? (isZh ? '当前台词有未保存修改' : 'Unsaved changes on current line')
+                    : (isZh ? '已同步' : 'Saved')}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => saveLine(activeLine.id)}
+                    disabled={savingLineId === activeLine.id}
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-45 dark:border-[#3f3f3f] dark:bg-[#151515] dark:text-[#e4e4e4] dark:hover:bg-[#212121]"
+                  >
+                    {savingLineId === activeLine.id ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                    {isZh ? '保存' : 'Save'}
+                  </button>
+                  <button
+                    onClick={synthesizeActive}
+                    disabled={synthLineId === activeLine.id}
+                    className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-45 dark:bg-[#f2f2f2] dark:text-[#111111] dark:hover:bg-[#d8d8d8]"
+                  >
+                    {synthLineId === activeLine.id ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                    {isZh ? '合成当前台词' : 'Synthesize Line'}
+                  </button>
+                  <button
+                    onClick={() => setDeleteConfirmOpen(true)}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-500 transition hover:bg-red-100 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-500/20"
+                    title={isZh ? '删除当前台词' : 'Delete current line'}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
       </main>
     </div>
   );

@@ -91,6 +91,11 @@ export const updateLine = async (lineId, data) => {
   return client.put(`/script/${lineId}`, data);
 };
 
+// 调整台词顺序
+export const reorderScriptLines = async (pid, lineIds) => {
+  return client.put(`/projects/${pid}/script/reorder`, { line_ids: lineIds });
+};
+
 // 语音合成 (批量或导出)
 export const synthesize = async (data) => {
   return client.post('/synthesis', data);

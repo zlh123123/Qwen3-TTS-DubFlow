@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import SessionLocal
 from database.init_db import init_database
-from routers import projects, config, characters, tasks, assets
+from routers import projects, config, characters, tasks, assets, scripts
 from utils.init_config import init_settings 
 from workers.worker import start_worker
 from contextlib import asynccontextmanager
@@ -46,6 +46,7 @@ app.include_router(config.router)
 app.include_router(characters.router)
 app.include_router(tasks.router)
 app.include_router(assets.router)
+app.include_router(scripts.router)
 
 @app.get("/")
 def read_root():

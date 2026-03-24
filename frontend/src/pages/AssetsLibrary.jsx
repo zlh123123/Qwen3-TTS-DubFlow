@@ -5,21 +5,21 @@ import {
   FolderOpen,
   Mic2,
   Waves,
-  Music2,
   Upload,
   Trash2,
   Loader2,
   Link2,
   Unlink,
   Library,
+  FolderSearch,
 } from 'lucide-react';
+import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
 import * as API from '../api/endpoints';
 import { useLang } from '../contexts/LanguageContext';
 
 const TAB_OPTIONS = [
   { key: 'character_refs', labelZh: '角色语音', labelEn: 'Character Voice', icon: Mic2 },
   { key: 'effects', labelZh: '环境/音效', labelEn: 'Effects', icon: Waves },
-  { key: 'bgms', labelZh: '背景音乐', labelEn: 'BGM', icon: Music2 },
 ];
 
 const resolveAssetUrl = (path) => {
@@ -53,18 +53,14 @@ export default function AssetsLibrary() {
   const [chars, setChars] = useState([]);
   const [projectCharacterRefs, setProjectCharacterRefs] = useState([]);
   const [projectEffects, setProjectEffects] = useState([]);
-  const [projectBgms, setProjectBgms] = useState([]);
   const [globalCharacterRefs, setGlobalCharacterRefs] = useState([]);
   const [globalEffects, setGlobalEffects] = useState([]);
-  const [globalBgms, setGlobalBgms] = useState([]);
 
   const [sourcePath, setSourcePath] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [note, setNote] = useState('');
   const [selectedCharId, setSelectedCharId] = useState('');
   const [effectCategory, setEffectCategory] = useState('ambience');
-  const [bgmMood, setBgmMood] = useState('');
-  const [bgmBpm, setBgmBpm] = useState('');
 
   const refreshAll = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -73,26 +69,20 @@ export default function AssetsLibrary() {
         charsRes,
         projectRefsRes,
         projectEffectsRes,
-        projectBgmRes,
         globalRefsRes,
         globalEffectsRes,
-        globalBgmRes,
       ] = await Promise.all([
         API.getCharacters(pid),
         API.getCharacterRefs(pid),
         API.getEffects(pid),
-        API.getBgms(pid),
         API.getGlobalCharacterRefs(pid),
         API.getGlobalEffects(pid),
-        API.getGlobalBgms(pid),
       ]);
       setChars(asArray(charsRes));
       setProjectCharacterRefs(asArray(projectRefsRes));
       setProjectEffects(asArray(projectEffectsRes));
-      setProjectBgms(asArray(projectBgmRes));
       setGlobalCharacterRefs(asArray(globalRefsRes));
       setGlobalEffects(asArray(globalEffectsRes));
-      setGlobalBgms(asArray(globalBgmRes));
     } catch (error) {
       console.error('Load assets failed:', error);
     } finally {
@@ -118,15 +108,13 @@ export default function AssetsLibrary() {
 
   const projectItems = useMemo(() => {
     if (activeTab === 'character_refs') return projectCharacterRefs;
-    if (activeTab === 'effects') return projectEffects;
-    return projectBgms;
-  }, [activeTab, projectCharacterRefs, projectEffects, projectBgms]);
+    return projectEffects;
+  }, [activeTab, projectCharacterRefs, projectEffects]);
 
   const globalItems = useMemo(() => {
     if (activeTab === 'character_refs') return globalCharacterRefs;
-    if (activeTab === 'effects') return globalEffects;
-    return globalBgms;
-  }, [activeTab, globalCharacterRefs, globalEffects, globalBgms]);
+    return globalEffects;
+  }, [activeTab, globalCharacterRefs, globalEffects]);
 
   const handleSwitchTab = (tabKey) => {
     setActiveTab(tabKey);
@@ -138,14 +126,32 @@ export default function AssetsLibrary() {
     setDisplayName('');
     setNote('');
     setEffectCategory('ambience');
-    setBgmMood('');
-    setBgmBpm('');
+  };
+
+  const handlePickFile = async () => {
+    try {
+      const selected = await openFileDialog({
+        multiple: false,
+        directory: false,
+        filters: [
+          { name: 'Audio', extensions: ['wav', 'mp3', 'flac', 'm4a', 'aac', 'ogg'] },
+          { name: 'All Files', extensions: ['*'] },
+        ],
+      });
+      if (!selected) return;
+      if (typeof selected === 'string') {
+        setSourcePath(selected);
+      }
+    } catch (err) {
+      console.error('Pick file failed:', err);
+      alert(isZh ? '打开文件选择器失败，请重试。' : 'Failed to open file picker.');
+    }
   };
 
   const handleImport = async () => {
     const src = sourcePath.trim();
     if (!src) {
-      alert(isZh ? '请填写 source_path（本地绝对路径）' : 'Please enter source_path (absolute local path)');
+      alert(isZh ? '请先选择要导入的音频文件。' : 'Please choose an audio file first.');
       return;
     }
     if (activeTab === 'character_refs' && !selectedCharId) {
@@ -164,7 +170,7 @@ export default function AssetsLibrary() {
           source_type: 'imported',
           note: note.trim() || null,
         });
-      } else if (activeTab === 'effects') {
+      } else {
         await API.importEffect(pid, {
           source_path: src,
           effect_category: effectCategory,
@@ -173,22 +179,12 @@ export default function AssetsLibrary() {
           source_type: 'imported',
           note: note.trim() || null,
         });
-      } else {
-        await API.importBgm(pid, {
-          source_path: src,
-          display_name: displayName.trim() || null,
-          copy_to_project: true,
-          source_type: 'imported',
-          mood: bgmMood.trim() || null,
-          bpm: bgmBpm ? Number(bgmBpm) : null,
-          note: note.trim() || null,
-        });
       }
       resetImportForm();
       await refreshAll(true);
     } catch (error) {
       console.error('Import asset failed:', error);
-      alert(isZh ? '导入失败，请检查文件路径是否有效' : 'Import failed, check if source path is valid');
+      alert(isZh ? '导入失败，请重试。' : 'Import failed.');
     } finally {
       setImporting(false);
     }
@@ -202,10 +198,8 @@ export default function AssetsLibrary() {
           asset_id: asset.id,
           character_id: selectedCharId || null,
         });
-      } else if (activeTab === 'effects') {
-        await API.linkEffect(pid, { asset_id: asset.id });
       } else {
-        await API.linkBgm(pid, { asset_id: asset.id });
+        await API.linkEffect(pid, { asset_id: asset.id });
       }
       await refreshAll(true);
     } catch (error) {
@@ -222,10 +216,8 @@ export default function AssetsLibrary() {
     try {
       if (activeTab === 'character_refs') {
         await API.unlinkCharacterRef(pid, asset.id);
-      } else if (activeTab === 'effects') {
-        await API.unlinkEffect(pid, asset.id);
       } else {
-        await API.unlinkBgm(pid, asset.id);
+        await API.unlinkEffect(pid, asset.id);
       }
       await refreshAll(true);
     } catch (error) {
@@ -242,10 +234,8 @@ export default function AssetsLibrary() {
     try {
       if (activeTab === 'character_refs') {
         await API.deleteCharacterRef(asset.id);
-      } else if (activeTab === 'effects') {
-        await API.deleteEffect(asset.id);
       } else {
-        await API.deleteBgm(asset.id);
+        await API.deleteEffect(asset.id);
       }
       await refreshAll(true);
     } catch (error) {
@@ -288,12 +278,7 @@ export default function AssetsLibrary() {
             >
               <ChevronRight className="rotate-180" size={16} />
             </button>
-            <div>
-              <h1 className="text-xl font-semibold text-slate-900 dark:text-[#f0f0f0]">{isZh ? '素材库' : 'Assets Library'}</h1>
-              <div className="mt-0.5 text-xs text-slate-500 dark:text-[#a0a0a0]">
-                {isZh ? '全局资产可跨项目复用，项目内只做引用。' : 'Global assets are reusable across projects; project uses links.'}
-              </div>
-            </div>
+            <h1 className="text-xl font-semibold text-slate-900 dark:text-[#f0f0f0]">{isZh ? '素材库' : 'Assets Library'}</h1>
           </div>
           <button
             onClick={() => nav(`/project/${pid}/studio`)}
@@ -305,122 +290,12 @@ export default function AssetsLibrary() {
       </header>
 
       <main className="flex min-h-0 flex-1 gap-6 overflow-hidden px-8 py-6">
-        <section className="w-[360px] shrink-0 rounded-2xl border border-slate-200 bg-white p-4 dark:border-[#343434] dark:bg-[#1a1a1a]">
-          <div className="mb-3 text-sm font-semibold text-slate-900 dark:text-[#f0f0f0]">
-            {isZh ? '导入到全局素材库' : 'Import to Global Library'}
-          </div>
-          <div className="space-y-3 text-sm">
-            <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-[#9d9d9d]">
-                source_path
-              </label>
-              <input
-                value={sourcePath}
-                onChange={(e) => setSourcePath(e.target.value)}
-                placeholder="/Users/.../voice.wav"
-                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-blue-400 dark:border-[#3b3b3b] dark:bg-[#252526] dark:text-[#e6e6e6]"
-              />
-              <div className="mt-1 text-[11px] text-slate-500 dark:text-[#9a9a9a]">
-                {isZh ? '填写本机绝对路径，导入后会复制到全局资产目录。' : 'Use absolute local path. File will be copied to global asset storage.'}
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-[#9d9d9d]">
-                {isZh ? '显示名' : 'Display Name'}
-              </label>
-              <input
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-blue-400 dark:border-[#3b3b3b] dark:bg-[#252526] dark:text-[#e6e6e6]"
-              />
-            </div>
-
-            {activeTab === 'character_refs' && (
-              <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-[#9d9d9d]">
-                  {isZh ? '默认绑定角色（当前项目）' : 'Default Character (Current Project)'}
-                </label>
-                <select
-                  value={selectedCharId}
-                  onChange={(e) => setSelectedCharId(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-blue-400 dark:border-[#3b3b3b] dark:bg-[#252526] dark:text-[#e6e6e6]"
-                >
-                  {chars.map((char) => (
-                    <option key={char.id} value={char.id}>{char.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {activeTab === 'effects' && (
-              <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-[#9d9d9d]">
-                  {isZh ? '音效类型' : 'Effect Category'}
-                </label>
-                <select
-                  value={effectCategory}
-                  onChange={(e) => setEffectCategory(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-blue-400 dark:border-[#3b3b3b] dark:bg-[#252526] dark:text-[#e6e6e6]"
-                >
-                  <option value="ambience">{isZh ? '环境音' : 'Ambience'}</option>
-                  <option value="effect">{isZh ? '音效' : 'Effect'}</option>
-                </select>
-              </div>
-            )}
-
-            {activeTab === 'bgms' && (
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-[#9d9d9d]">BPM</label>
-                  <input
-                    value={bgmBpm}
-                    onChange={(e) => setBgmBpm(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-blue-400 dark:border-[#3b3b3b] dark:bg-[#252526] dark:text-[#e6e6e6]"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-[#9d9d9d]">
-                    {isZh ? '情绪' : 'Mood'}
-                  </label>
-                  <input
-                    value={bgmMood}
-                    onChange={(e) => setBgmMood(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-blue-400 dark:border-[#3b3b3b] dark:bg-[#252526] dark:text-[#e6e6e6]"
-                  />
-                </div>
-              </div>
-            )}
-
-            <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-[#9d9d9d]">
-                {isZh ? '备注' : 'Note'}
-              </label>
-              <textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                rows={3}
-                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-blue-400 dark:border-[#3b3b3b] dark:bg-[#252526] dark:text-[#e6e6e6]"
-              />
-            </div>
-
-            <button
-              onClick={handleImport}
-              disabled={importing}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-45 dark:bg-[#f2f2f2] dark:text-[#111111] dark:hover:bg-[#d9d9d9]"
-            >
-              {importing ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-              {isZh ? '导入并引用到当前项目' : 'Import and Link to Project'}
-            </button>
-          </div>
-        </section>
-
         <section className="min-w-0 flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-[#343434] dark:bg-[#1a1a1a]">
           <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3 dark:border-[#343434]">
             {TAB_OPTIONS.map((tab) => {
               const Icon = tab.icon;
               const active = tab.key === activeTab;
-              const projectCount = tab.key === 'character_refs' ? projectCharacterRefs.length : tab.key === 'effects' ? projectEffects.length : projectBgms.length;
+              const projectCount = tab.key === 'character_refs' ? projectCharacterRefs.length : projectEffects.length;
               return (
                 <button
                   key={tab.key}
@@ -496,13 +371,13 @@ export default function AssetsLibrary() {
               <div>
                 <div className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-[#9d9d9d]">
                   <Library size={13} />
-                  {isZh ? '全局素材库（跨项目）' : 'Global Library (Cross-Project)'}
+                  {isZh ? '全局素材库' : 'Global Library'}
                 </div>
                 {globalItems.length === 0 ? (
                   <div className="flex h-44 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 text-center dark:border-[#3b3b3b]">
                     <FolderOpen size={44} className="mb-3 text-slate-400 dark:text-[#777]" />
                     <div className="text-sm font-semibold text-slate-500 dark:text-[#9a9a9a]">
-                      {isZh ? '还没有全局素材，先在左侧导入' : 'No global assets yet. Import from left panel.'}
+                      {isZh ? '还没有全局素材，先从右侧导入' : 'No global assets yet. Import from right panel.'}
                     </div>
                   </div>
                 ) : (
@@ -526,7 +401,7 @@ export default function AssetsLibrary() {
                                 className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-45 dark:border-[#4a4a4a] dark:bg-[#2a2a2a] dark:text-[#d3d3d3] dark:hover:bg-[#333333]"
                               >
                                 {linkingId === item.id ? <Loader2 size={12} className="animate-spin" /> : <Link2 size={12} />}
-                                {isZh ? '引用到项目' : 'Link'}
+                                {isZh ? '引用' : 'Link'}
                               </button>
                             )}
                             <button
@@ -550,6 +425,91 @@ export default function AssetsLibrary() {
             </div>
           </div>
         </section>
+
+        <aside className="w-[360px] shrink-0 rounded-2xl border border-slate-200 bg-white p-4 dark:border-[#343434] dark:bg-[#1a1a1a]">
+          <div className="mb-3 text-sm font-semibold text-slate-900 dark:text-[#f0f0f0]">
+            {isZh ? '导入素材' : 'Import Asset'}
+          </div>
+          <div className="space-y-3 text-sm">
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-[#9d9d9d]">
+                {isZh ? '文件' : 'File'}
+              </label>
+              <button
+                onClick={handlePickFile}
+                className="inline-flex w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-100 dark:border-[#3b3b3b] dark:bg-[#252526] dark:text-[#d9d9d9] dark:hover:bg-[#2e2e2e]"
+              >
+                <span className="truncate pr-2">{sourcePath || (isZh ? '选择音频文件' : 'Choose audio file')}</span>
+                <FolderSearch size={15} className="shrink-0" />
+              </button>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-[#9d9d9d]">
+                {isZh ? '显示名' : 'Display Name'}
+              </label>
+              <input
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-blue-400 dark:border-[#3b3b3b] dark:bg-[#252526] dark:text-[#e6e6e6]"
+              />
+            </div>
+
+            {activeTab === 'character_refs' && (
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-[#9d9d9d]">
+                  {isZh ? '关联角色（当前项目）' : 'Bind Character (Current Project)'}
+                </label>
+                <select
+                  value={selectedCharId}
+                  onChange={(e) => setSelectedCharId(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-blue-400 dark:border-[#3b3b3b] dark:bg-[#252526] dark:text-[#e6e6e6]"
+                >
+                  {chars.map((char) => (
+                    <option key={char.id} value={char.id}>{char.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {activeTab === 'effects' && (
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-[#9d9d9d]">
+                  {isZh ? '音效类型' : 'Effect Category'}
+                </label>
+                <select
+                  value={effectCategory}
+                  onChange={(e) => setEffectCategory(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-blue-400 dark:border-[#3b3b3b] dark:bg-[#252526] dark:text-[#e6e6e6]"
+                >
+                  <option value="ambience">{isZh ? '环境音' : 'Ambience'}</option>
+                  <option value="effect">{isZh ? '音效' : 'Effect'}</option>
+                </select>
+              </div>
+            )}
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-[#9d9d9d]">
+                {isZh ? '备注' : 'Note'}
+              </label>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={3}
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-blue-400 dark:border-[#3b3b3b] dark:bg-[#252526] dark:text-[#e6e6e6]"
+              />
+            </div>
+
+            <button
+              onClick={handleImport}
+              disabled={importing}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-45 dark:bg-[#f2f2f2] dark:text-[#111111] dark:hover:bg-[#d9d9d9]"
+            >
+              {importing ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+              {isZh ? '导入并引用到当前项目' : 'Import & Link'}
+            </button>
+          </div>
+        </aside>
       </main>
     </div>
   );

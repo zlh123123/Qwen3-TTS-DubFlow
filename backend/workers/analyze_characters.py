@@ -7,6 +7,39 @@ import openai
 import logging
 import uuid
 
+
+def _normalize_name(name: str) -> str:
+    return (name or "").strip().lower()
+
+
+def _pick_canonical_character(chars):
+    # 优先保留已确认/有参考音的角色，尽量不丢用户已做的工作
+    return sorted(
+        chars,
+        key=lambda c: (
+            1 if c.is_confirmed else 0,
+            1 if c.ref_audio_path else 0,
+            1 if c.prompt else 0,
+            c.id or "",
+        ),
+        reverse=True,
+    )[0]
+
+
+def _extract_character_payload(char_data: dict):
+    name = (char_data.get("name") or "").strip()
+    if not name:
+        return None
+    return {
+        "name": name,
+        "gender": (char_data.get("gender") or "").strip(),
+        "age": (char_data.get("age") or "").strip(),
+        "description": (char_data.get("personality_tags") or "").strip(),
+        "prompt": (char_data.get("voice_prompt") or "").strip(),
+        "ref_text": (char_data.get("ref_text") or "").strip(),
+    }
+
+
 def load_prompt(language: str) -> str:
     """根据语言加载提示词"""
     prompt_dir = os.path.join(os.path.dirname(__file__), "prompts", "getroles")  
@@ -127,22 +160,82 @@ def analyze_characters_handler(task: Task, db: Session):
             cleaned_json = generated_text
         
         characters_data = json.loads(cleaned_json)
-        
-        for char_data in characters_data:
-            char = Character(
-                id=str(uuid.uuid4()),
-                project_id=project_id,
-                name=char_data["name"],
-                gender=char_data["gender"],
-                age=char_data["age"],
-                description=char_data.get("personality_tags", ""),  
-                prompt=char_data["voice_prompt"], 
-                is_confirmed=False,
-                ref_text=char_data.get("ref_text", ""),  
-            )
-            db.add(char)
+
+        existing_chars = db.query(Character).filter(Character.project_id == project_id).all()
+        existing_groups = {}
+        for c in existing_chars:
+            key = _normalize_name(c.name)
+            if not key:
+                continue
+            existing_groups.setdefault(key, []).append(c)
+
+        canonical_map = {}
+        duplicates_to_delete = []
+        for key, group in existing_groups.items():
+            keeper = _pick_canonical_character(group)
+            canonical_map[key] = keeper
+            for item in group:
+                if item.id != keeper.id:
+                    duplicates_to_delete.append(item)
+
+        seen_generated = set()
+        upserted_count = 0
+
+        for raw in characters_data:
+            if not isinstance(raw, dict):
+                continue
+            payload = _extract_character_payload(raw)
+            if not payload:
+                continue
+            key = _normalize_name(payload["name"])
+            if key in seen_generated:
+                continue
+            seen_generated.add(key)
+
+            existing = canonical_map.get(key)
+            if existing:
+                voice_fields_changed = any(
+                    [
+                        (existing.gender or "") != payload["gender"],
+                        (existing.age or "") != payload["age"],
+                        (existing.description or "") != payload["description"],
+                        (existing.prompt or "") != payload["prompt"],
+                        (existing.ref_text or "") != payload["ref_text"],
+                    ]
+                )
+                existing.name = payload["name"]
+                existing.gender = payload["gender"]
+                existing.age = payload["age"]
+                existing.description = payload["description"]
+                existing.prompt = payload["prompt"]
+                existing.ref_text = payload["ref_text"]
+                if voice_fields_changed:
+                    existing.is_confirmed = False
+            else:
+                char = Character(
+                    id=str(uuid.uuid4()),
+                    project_id=project_id,
+                    name=payload["name"],
+                    gender=payload["gender"],
+                    age=payload["age"],
+                    description=payload["description"],
+                    prompt=payload["prompt"],
+                    is_confirmed=False,
+                    ref_text=payload["ref_text"],
+                )
+                db.add(char)
+                canonical_map[key] = char
+            upserted_count += 1
+
+        for dup in duplicates_to_delete:
+            db.delete(dup)
+
         db.commit()
         
-        return {"message": f"Extracted {len(characters_data)} characters"}
+        return {
+            "message": f"Upserted {upserted_count} characters",
+            "upserted": upserted_count,
+            "deduplicated": len(duplicates_to_delete),
+        }
     except json.JSONDecodeError as e:
         raise ValueError(f"Failed to parse LLM response: {e}")
