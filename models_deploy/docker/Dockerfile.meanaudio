@@ -1,0 +1,33 @@
+FROM python:3.11-slim
+
+ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cu121
+ARG API_PORT=8003
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    API_PORT=${API_PORT} \
+    PYTHONPATH=/app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        git \
+        ffmpeg \
+        sox \
+        libsox-dev \
+        libsndfile1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY services /app/services
+COPY MeanAudio /app/MeanAudio
+
+RUN pip install --upgrade pip \
+    && pip install torch torchvision torchaudio --index-url ${TORCH_INDEX_URL} \
+    && pip install -r /app/services/requirements-api.txt \
+    && pip install -e /app/MeanAudio
+
+EXPOSE ${API_PORT}
+
+CMD ["sh", "-lc", "uvicorn services.meanaudio_api:app --host 0.0.0.0 --port ${API_PORT}"]

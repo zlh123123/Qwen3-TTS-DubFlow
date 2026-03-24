@@ -393,6 +393,97 @@ Narratis/
 
 ---
 
+## 后期处理（PostFX / Pedalboard）
+
+> 用于对白/环境音后处理：预设管理、实时预览、生成后落盘应用。
+
+### 预设管理
+
+- 获取预设列表：`GET /api/postfx/presets`
+- 创建自定义预设：`POST /api/postfx/presets`
+- 更新自定义预设：`PUT /api/postfx/presets/{preset_id}`
+- 删除自定义预设：`DELETE /api/postfx/presets/{preset_id}`
+
+系统内置 4 个预设（只读）：
+- `builtin_robot`（机器人）
+- `builtin_broadcast`（广播）
+- `builtin_echo_chamber`（回声室）
+- `builtin_deep_voice`（低沉声音）
+
+创建预设请求示例：
+
+```json
+{
+  "name": "我的科幻音色",
+  "config": {
+    "pitch_shift_semitones": 4,
+    "gain_db": -1,
+    "highpass_hz": 120,
+    "lowpass_hz": 9000,
+    "reverb": { "enabled": true, "room_size": 0.3, "damping": 0.5, "wet_level": 0.2, "dry_level": 0.9 },
+    "delay": { "enabled": false, "delay_seconds": 0.2, "feedback": 0.2, "mix": 0.2 },
+    "modulation": { "enabled": true, "mode": "flanger", "rate_hz": 0.8, "depth": 0.6, "centre_delay_ms": 2.5, "feedback": 0.5, "mix": 0.35 },
+    "compressor": { "enabled": true, "threshold_db": -20, "ratio": 4, "attack_ms": 4, "release_ms": 120 }
+  }
+}
+```
+
+### 角色默认预设（用于角色级默认后期）
+
+- 获取项目角色默认预设：`GET /api/postfx/projects/{project_id}/character-defaults`
+- 设置角色默认预设：`PUT /api/postfx/characters/{character_id}/default`
+
+设置请求示例：
+
+```json
+{
+  "preset_id": "preset_uuid_or_null"
+}
+```
+
+### 实时预览与落盘应用
+
+- 实时预览（返回临时音频 URL）：`POST /api/postfx/preview`
+- 应用后期并写入项目目录：`POST /api/postfx/apply`
+
+预览请求示例：
+
+```json
+{
+  "source_path": "/static/projects/{project_id}/voices/line_1.wav",
+  "preset_id": "preset_uuid",
+  "config_override": {
+    "gain_db": 2.5
+  }
+}
+```
+
+应用请求示例：
+
+```json
+{
+  "project_id": "project_uuid",
+  "source_path": "/static/projects/{project_id}/voices/line_1.wav",
+  "preset_id": "preset_uuid",
+  "config_override": {
+    "pitch_shift_semitones": -2
+  },
+  "output_name": "line_1_postfx.wav"
+}
+```
+
+支持效果（8 类）：
+- 变调（Pitch Shift，±12 semitones）
+- 混响（Reverb）
+- 延迟（Delay）
+- 合唱 / 弗兰德（Chorus / Flanger）
+- 压缩器（Compressor）
+- 增益（Gain，-40~+40 dB）
+- 高通滤波器（High-pass）
+- 低通滤波器（Low-pass）
+
+---
+
 ## Studio 时间轨（规划接口，占位）
 
 > 以下接口为“规划接口”，当前后端尚未实现，仅用于先确定 API 契约。

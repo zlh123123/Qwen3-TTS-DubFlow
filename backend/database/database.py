@@ -128,6 +128,13 @@ class Character(Base):
 
     project = relationship("Project", back_populates="characters")
     character_ref_links = relationship("ProjectCharacterRefAssetLink", back_populates="character")
+    postfx_default = relationship(
+        "CharacterPostFxDefault",
+        back_populates="character",
+        uselist=False,
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class ScriptLine(Base):
@@ -294,3 +301,39 @@ class ProjectBgmAssetLink(Base):
 
     project = relationship("Project", back_populates="bgm_links")
     asset = relationship("BgmAsset", back_populates="project_links")
+
+
+class PostFxPreset(Base):
+    __tablename__ = "postfx_presets"
+    __table_args__ = (
+        UniqueConstraint("preset_key", name="uq_postfx_preset_key"),
+    )
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    preset_key = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    is_builtin = Column(Boolean, default=False)
+    config = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.now)
+    updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now)
+
+    character_defaults = relationship(
+        "CharacterPostFxDefault",
+        back_populates="preset",
+        passive_deletes=True,
+    )
+
+
+class CharacterPostFxDefault(Base):
+    __tablename__ = "character_postfx_defaults"
+    __table_args__ = (
+        UniqueConstraint("character_id", name="uq_character_postfx_default_character"),
+    )
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    character_id = Column(String, ForeignKey("characters.id", ondelete="CASCADE"), nullable=False)
+    preset_id = Column(String, ForeignKey("postfx_presets.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now)
+
+    character = relationship("Character", back_populates="postfx_default")
+    preset = relationship("PostFxPreset", back_populates="character_defaults")

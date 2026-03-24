@@ -1,0 +1,127 @@
+name: models-deploy
+
+services:
+  qwen-voice-design:
+    profiles: ["qwen-design"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.qwen
+      args:
+        API_MODULE: services.qwen_voice_design_api:app
+        API_PORT: 8001
+        TORCH_INDEX_URL: ${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu121}
+    image: qwen-voice-design:latest
+    container_name: qwen-voice-design-api
+    environment:
+      QWEN_VOICE_DESIGN_MODEL: ${QWEN_VOICE_DESIGN_MODEL:-Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign}
+      QWEN_DEVICE: ${QWEN_DEVICE:-cuda:0}
+      QWEN_DTYPE: ${QWEN_DTYPE:-bfloat16}
+      QWEN_ATTN_IMPLEMENTATION: ${QWEN_ATTN_IMPLEMENTATION:-}
+      QWEN_MODEL_LOCAL_FILES_ONLY: ${QWEN_MODEL_LOCAL_FILES_ONLY:-0}
+      HF_ENDPOINT: ${HF_ENDPOINT:-}
+    volumes:
+      - ${QWEN_MODELS_DIR:-./volumes/qwen-models}:/models
+      - ${HF_HOME_DIR:-./volumes/hf-home}:/root/.cache/huggingface
+    ports:
+      - "${QWEN_VOICE_DESIGN_PORT:-8001}:8001"
+    gpus: ${QWEN_GPUS:-all}
+    restart: unless-stopped
+
+  qwen-voice-clone:
+    profiles: ["qwen-clone"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.qwen
+      args:
+        API_MODULE: services.qwen_voice_clone_api:app
+        API_PORT: 8002
+        TORCH_INDEX_URL: ${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu121}
+    image: qwen-voice-clone:latest
+    container_name: qwen-voice-clone-api
+    environment:
+      QWEN_VOICE_CLONE_MODEL: ${QWEN_VOICE_CLONE_MODEL:-Qwen/Qwen3-TTS-12Hz-1.7B-Base}
+      QWEN_DEVICE: ${QWEN_DEVICE:-cuda:0}
+      QWEN_DTYPE: ${QWEN_DTYPE:-bfloat16}
+      QWEN_ATTN_IMPLEMENTATION: ${QWEN_ATTN_IMPLEMENTATION:-}
+      QWEN_MODEL_LOCAL_FILES_ONLY: ${QWEN_MODEL_LOCAL_FILES_ONLY:-0}
+      HF_ENDPOINT: ${HF_ENDPOINT:-}
+    volumes:
+      - ${QWEN_MODELS_DIR:-./volumes/qwen-models}:/models
+      - ${HF_HOME_DIR:-./volumes/hf-home}:/root/.cache/huggingface
+    ports:
+      - "${QWEN_VOICE_CLONE_PORT:-8002}:8002"
+    gpus: ${QWEN_GPUS:-all}
+    restart: unless-stopped
+
+  fish-speech:
+    profiles: ["fish"]
+    build:
+      context: ./fish-speech
+      dockerfile: docker/Dockerfile
+      target: server
+      args:
+        BACKEND: ${FISH_BACKEND:-cuda}
+        CUDA_VER: ${FISH_CUDA_VER:-12.9.0}
+        UV_EXTRA: ${FISH_UV_EXTRA:-cu129}
+        UV_VERSION: ${FISH_UV_VERSION:-0.8.15}
+    image: fish-speech-server:latest
+    container_name: fish-speech-api
+    environment:
+      API_SERVER_NAME: 0.0.0.0
+      API_SERVER_PORT: 8080
+      LLAMA_CHECKPOINT_PATH: ${FISH_LLAMA_CHECKPOINT_PATH:-checkpoints/s2-pro}
+      DECODER_CHECKPOINT_PATH: ${FISH_DECODER_CHECKPOINT_PATH:-checkpoints/s2-pro/codec.pth}
+      DECODER_CONFIG_NAME: ${FISH_DECODER_CONFIG_NAME:-modded_dac_vq}
+      COMPILE: ${FISH_COMPILE:-0}
+      FISH_AUTO_DOWNLOAD: ${FISH_AUTO_DOWNLOAD:-1}
+      FISH_HF_REPO: ${FISH_HF_REPO:-fishaudio/s2-pro}
+      FISH_HF_LOCAL_DIR: ${FISH_HF_LOCAL_DIR:-/app/checkpoints/s2-pro}
+      HUGGING_FACE_HUB_TOKEN: ${HUGGING_FACE_HUB_TOKEN:-}
+      HF_ENDPOINT: ${HF_ENDPOINT:-}
+    volumes:
+      - ${FISH_CHECKPOINTS_DIR:-./fish-speech/checkpoints}:/app/checkpoints
+      - ${FISH_REFERENCES_DIR:-./fish-speech/references}:/app/references
+    ports:
+      - "${FISH_API_PORT:-8080}:8080"
+    gpus: ${FISH_GPUS:-all}
+    command:
+      - /bin/bash
+      - -lc
+      - |
+        set -euo pipefail
+        CODEC_PATH="/app/${DECODER_CHECKPOINT_PATH}"
+        if [ "${FISH_AUTO_DOWNLOAD}" = "1" ] && [ ! -f "${CODEC_PATH}" ]; then
+          echo "[fish-speech] Missing checkpoint: ${CODEC_PATH}"
+          echo "[fish-speech] Downloading ${FISH_HF_REPO} -> ${FISH_HF_LOCAL_DIR}"
+          uv run hf download "${FISH_HF_REPO}" --local-dir "${FISH_HF_LOCAL_DIR}"
+        fi
+        exec /app/start_server.sh
+    restart: unless-stopped
+
+  meanaudio:
+    profiles: ["meanaudio"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.meanaudio
+      args:
+        API_PORT: 8003
+        TORCH_INDEX_URL: ${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu121}
+    image: meanaudio-api:latest
+    container_name: meanaudio-api
+    environment:
+      MEANAUDIO_VARIANT: ${MEANAUDIO_VARIANT:-meanaudio_s}
+      MEANAUDIO_DEVICE: ${MEANAUDIO_DEVICE:-cuda}
+      MEANAUDIO_AUTO_DOWNLOAD: ${MEANAUDIO_AUTO_DOWNLOAD:-1}
+      MEANAUDIO_ENCODER: ${MEANAUDIO_ENCODER:-t5_clap}
+      MEANAUDIO_USE_ROPE: ${MEANAUDIO_USE_ROPE:-1}
+      MEANAUDIO_TEXT_C_DIM: ${MEANAUDIO_TEXT_C_DIM:-512}
+      MEANAUDIO_FULL_PRECISION: ${MEANAUDIO_FULL_PRECISION:-0}
+      MEANAUDIO_HF_REPO: ${MEANAUDIO_HF_REPO:-AndreasXi/MeanAudio}
+      HF_ENDPOINT: ${HF_ENDPOINT:-}
+    volumes:
+      - ${MEANAUDIO_WEIGHTS_DIR:-./MeanAudio/weights}:/app/MeanAudio/weights
+      - ${HF_HOME_DIR:-./volumes/hf-home}:/root/.cache/huggingface
+    ports:
+      - "${MEANAUDIO_PORT:-8003}:8003"
+    gpus: ${MEANAUDIO_GPUS:-all}
+    restart: unless-stopped

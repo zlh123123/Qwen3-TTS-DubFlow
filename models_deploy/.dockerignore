@@ -1,0 +1,18 @@
+.git
+.gitmodules
+.DS_Store
+
+volumes/
+
+# Runtime model/checkpoint caches
+MeanAudio/weights/
+fish-speech/checkpoints/
+fish-speech/references/
+
+# Not needed for API images
+fish-speech/
+Qwen3-TTS/assets/
+
+# Python cache
+**/__pycache__/
+**/*.pyc

@@ -379,6 +379,138 @@ export default function SettingsModal({ open, close }) {
     const raw = meta && Array.isArray(meta[activeTab]) ? meta[activeTab] : [];
     return raw.filter((item) => shouldShowItem(item));
   }, [meta, activeTab, cfg]);
+
+  const ttsItems = useMemo(() => {
+    return meta && Array.isArray(meta.tts_settings) ? meta.tts_settings : [];
+  }, [meta]);
+
+  const ttsItemMap = useMemo(() => {
+    const map = {};
+    ttsItems.forEach((item) => {
+      if (item?.key) map[item.key] = item;
+    });
+    return map;
+  }, [ttsItems]);
+
+  const ttsBackendOptions = useMemo(() => {
+    return normalizeOptions(ttsItemMap['tts.backend']?.options).map((x) => String(x));
+  }, [ttsItemMap]);
+
+  const ttsBackend = cfg['tts.backend'] || 'aliyun';
+  const ttsBackendCards = useMemo(() => {
+    const cards = [
+      {
+        id: 'local_vllm',
+        title: isZh ? '本地服务（vLLM兼容）' : 'Local Service (vLLM-Compatible)',
+        desc: isZh
+          ? '适合本机或局域网部署，需兼容 /v1/audio/speech。'
+          : 'For local/LAN deployment. Must provide /v1/audio/speech.',
+        tag: isZh ? '推荐' : 'Recommended',
+      },
+      {
+        id: 'autodl',
+        title: 'AutoDL',
+        desc: isZh
+          ? '通过本地端口转发连接云端推理实例。'
+          : 'Connect cloud instance via local port forwarding.',
+        tag: isZh ? '穿透' : 'Tunnel',
+      },
+      {
+        id: 'aliyun',
+        title: isZh ? '阿里云 DashScope' : 'Aliyun DashScope',
+        desc: isZh
+          ? '使用官方 API，配置 Key 与区域即可。'
+          : 'Use official API with key and region.',
+        tag: 'API',
+      },
+      {
+        id: 'local_pytorch',
+        title: isZh ? '本地 PyTorch（旧方案）' : 'Local PyTorch (Legacy)',
+        desc: isZh
+          ? '保留兼容配置，不建议新部署使用。'
+          : 'Legacy mode kept for compatibility.',
+        tag: isZh ? '兼容' : 'Legacy',
+      },
+    ];
+    return cards.filter((card) => ttsBackendOptions.includes(card.id) || card.id === ttsBackend);
+  }, [isZh, ttsBackendOptions, ttsBackend]);
+
+  const ttsActiveCard = useMemo(() => {
+    return ttsBackendCards.find((card) => card.id === ttsBackend) || ttsBackendCards[0];
+  }, [ttsBackendCards, ttsBackend]);
+
+  const ttsDocUrl = 'https://github.com/zlh123123/Qwen3-TTS-DubFlow/blob/main/docs/tts-services.md';
+  const ttsBackendSummary = useMemo(() => {
+    if (ttsBackend === 'local_vllm') {
+      return {
+        primary: cfg['tts.vllm.vd_url'] || 'http://localhost:6006',
+        secondary: cfg['tts.vllm.base_url'] || 'http://localhost:6008',
+        labelPrimary: isZh ? 'VoiceDesign 服务' : 'VoiceDesign Service',
+        labelSecondary: isZh ? 'Base 服务' : 'Base Service',
+      };
+    }
+    if (ttsBackend === 'autodl') {
+      const vdPort = cfg['tts.autodl.vd_port'] || '6006';
+      const basePort = cfg['tts.autodl.base_port'] || '6008';
+      return {
+        primary: `127.0.0.1:${vdPort}`,
+        secondary: `127.0.0.1:${basePort}`,
+        labelPrimary: isZh ? 'VoiceDesign 端口' : 'VoiceDesign Port',
+        labelSecondary: isZh ? 'Base 端口' : 'Base Port',
+      };
+    }
+    if (ttsBackend === 'aliyun') {
+      return {
+        primary: cfg['tts.aliyun.region'] || 'beijing',
+        secondary: cfg['tts.aliyun.api_key'] ? '******' : '-',
+        labelPrimary: isZh ? '区域' : 'Region',
+        labelSecondary: isZh ? 'API Key' : 'API Key',
+      };
+    }
+    return {
+      primary: '-',
+      secondary: '-',
+      labelPrimary: isZh ? '主配置' : 'Primary',
+      labelSecondary: isZh ? '次配置' : 'Secondary',
+    };
+  }, [ttsBackend, cfg, isZh]);
+
+  const getTtsItem = (key, fallback = {}) => {
+    const existed = ttsItemMap[key];
+    if (existed) return existed;
+    return {
+      key,
+      type: fallback.type || 'text',
+      label: fallback.label || humanizeKey(key),
+      options: fallback.options || [],
+    };
+  };
+
+  const renderTtsRow = (item, hint = '') => {
+    if (!item) return null;
+    return (
+      <div key={item.key} className="grid gap-2 border-b border-slate-200 px-4 py-3 last:border-b-0 dark:border-[#343434]">
+        <label className="text-sm font-semibold text-slate-900 dark:text-[#ededed]">{resolveLabel(item)}</label>
+        <div>{renderInput(item)}</div>
+        {!!hint && <p className="text-xs text-slate-500 dark:text-[#9a9a9a]">{hint}</p>}
+      </div>
+    );
+  };
+
+  const ttsKnownKeySet = useMemo(() => new Set([
+    'tts.backend',
+    'tts.local.model_base_path',
+    'tts.local.model_vd_path',
+    'tts.local.device',
+    'tts.vllm.base_url',
+    'tts.vllm.vd_url',
+    'tts.autodl.base_port',
+    'tts.autodl.vd_port',
+    'tts.aliyun.api_key',
+    'tts.aliyun.region',
+  ]), []);
+
+  const ttsExtraItems = ttsItems.filter((item) => !ttsKnownKeySet.has(item.key) && shouldShowItem(item));
   const llmBuiltinProviders = [
     {
       id: 'openai',
@@ -1048,6 +1180,184 @@ export default function SettingsModal({ open, close }) {
                           />
                         </div>
                       </section>
+                    </div>
+                  </div>
+                ) : activeTab === 'tts_settings' ? (
+                  <div className="grid min-h-[460px] grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)]">
+                    <aside className="border-b border-slate-200 p-4 md:border-b-0 md:border-r dark:border-[#343434]">
+                      <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-[#9a9a9a]">
+                        {isZh ? '后端类型' : 'Backend Type'}
+                      </div>
+                      <div className="space-y-2">
+                        {ttsBackendCards.map((backendCard) => {
+                          const active = backendCard.id === ttsBackend;
+                          return (
+                            <button
+                              key={backendCard.id}
+                              type="button"
+                              onClick={() => updateField('tts.backend', backendCard.id)}
+                              className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${
+                                active
+                                  ? 'border-slate-900 bg-slate-900 text-white dark:border-[#5a5a5a] dark:bg-[#2f2f2f]'
+                                  : 'border-slate-200 bg-white text-slate-800 hover:bg-slate-50 dark:border-[#3b3b3b] dark:bg-[#1f1f1f] dark:text-[#dfdfdf] dark:hover:bg-[#2a2a2a]'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="truncate text-sm font-semibold">{backendCard.title}</span>
+                                <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                                  active
+                                    ? 'bg-white/15 text-white'
+                                    : 'bg-slate-100 text-slate-600 dark:bg-[#2b2b2b] dark:text-[#a0a0a0]'
+                                }`}>
+                                  {backendCard.tag}
+                                </span>
+                              </div>
+                              <p className={`mt-1 text-xs leading-5 ${
+                                active ? 'text-slate-200 dark:text-[#cfcfcf]' : 'text-slate-500 dark:text-[#9a9a9a]'
+                              }`}>
+                                {backendCard.desc}
+                              </p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </aside>
+
+                    <div className="space-y-5 px-6 py-6 md:px-8">
+                      <section className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-[#3b3b3b] dark:bg-[#1f1f1f]">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <div className="text-base font-semibold text-slate-900 dark:text-[#efefef]">
+                              {ttsActiveCard?.title || (isZh ? '语音后端' : 'TTS Backend')}
+                            </div>
+                            <p className="mt-1 text-xs text-slate-500 dark:text-[#a0a0a0]">
+                              {ttsActiveCard?.desc}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => openExternalLink(ttsDocUrl)}
+                            className="inline-flex w-fit items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-[#4a4a4a] dark:bg-[#2b2b2b] dark:text-[#dfdfdf] dark:hover:bg-[#343434]"
+                          >
+                            {isZh ? '接入文档' : 'Integration Docs'}
+                            <ExternalLink size={12} />
+                          </button>
+                        </div>
+                        <p className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/20 dark:text-blue-200">
+                          {isZh
+                            ? '提示：当前页面用于角色语音链路配置。Fish-Speech 与 MeanAudio 的独立服务部署请参考 models_deploy/README。'
+                            : 'Note: This page configures character TTS pipeline. For standalone Fish-Speech/MeanAudio services, see models_deploy/README.'}
+                        </p>
+                      </section>
+
+                      <section className="overflow-hidden rounded-xl border border-slate-200 dark:border-[#3b3b3b]">
+                        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2 dark:border-[#343434] dark:bg-[#1f1f1f]">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-[#9a9a9a]">
+                            {isZh ? '核心配置' : 'Core Configuration'}
+                          </div>
+                          {(ttsBackend === 'local_vllm' || ttsBackend === 'autodl') && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (ttsBackend === 'local_vllm') {
+                                  updateField('tts.vllm.base_url', 'http://localhost:6008');
+                                  updateField('tts.vllm.vd_url', 'http://localhost:6006');
+                                } else {
+                                  updateField('tts.autodl.base_port', '6008');
+                                  updateField('tts.autodl.vd_port', '6006');
+                                }
+                              }}
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-[#4a4a4a] dark:bg-[#2b2b2b] dark:text-[#dfdfdf] dark:hover:bg-[#343434]"
+                            >
+                              <RefreshCw size={12} />
+                              {isZh ? '填充默认值' : 'Fill Defaults'}
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="bg-white dark:bg-[#252526]">
+                          {ttsBackend === 'local_pytorch' && (
+                            <>
+                              {renderTtsRow(
+                                getTtsItem('tts.local.model_base_path', { type: 'text', label: isZh ? '克隆模型路径 (Base)' : 'Base Model Path' }),
+                                isZh ? '本地 Base 模型目录或文件路径。' : 'Local path for Base model.'
+                              )}
+                              {renderTtsRow(
+                                getTtsItem('tts.local.model_vd_path', { type: 'text', label: isZh ? '设计模型路径 (VoiceDesign)' : 'VoiceDesign Model Path' }),
+                                isZh ? '本地 VoiceDesign 模型目录或文件路径。' : 'Local path for VoiceDesign model.'
+                              )}
+                              {renderTtsRow(
+                                getTtsItem('tts.local.device', { type: 'select', options: ['cuda', 'cpu'], label: isZh ? '计算设备' : 'Compute Device' })
+                              )}
+                            </>
+                          )}
+
+                          {ttsBackend === 'local_vllm' && (
+                            <>
+                              {renderTtsRow(
+                                getTtsItem('tts.vllm.vd_url', { type: 'text', label: isZh ? 'VoiceDesign 服务地址' : 'VoiceDesign URL' }),
+                                isZh ? '用于角色音色设计预览。示例：http://localhost:6006' : 'Used by voice design preview. Example: http://localhost:6006'
+                              )}
+                              {renderTtsRow(
+                                getTtsItem('tts.vllm.base_url', { type: 'text', label: isZh ? 'Base 服务地址' : 'Base URL' }),
+                                isZh ? '用于克隆链路。示例：http://localhost:6008' : 'Used by clone pipeline. Example: http://localhost:6008'
+                              )}
+                            </>
+                          )}
+
+                          {ttsBackend === 'autodl' && (
+                            <>
+                              {renderTtsRow(
+                                getTtsItem('tts.autodl.vd_port', { type: 'text', label: isZh ? 'VoiceDesign 本地端口' : 'VoiceDesign Local Port' }),
+                                isZh ? '本机转发端口。示例：6006' : 'Local forwarded port. Example: 6006'
+                              )}
+                              {renderTtsRow(
+                                getTtsItem('tts.autodl.base_port', { type: 'text', label: isZh ? 'Base 本地端口' : 'Base Local Port' }),
+                                isZh ? '本机转发端口。示例：6008' : 'Local forwarded port. Example: 6008'
+                              )}
+                            </>
+                          )}
+
+                          {ttsBackend === 'aliyun' && (
+                            <>
+                              {renderTtsRow(
+                                getTtsItem('tts.aliyun.api_key', { type: 'password', label: 'DashScope API Key' }),
+                                isZh ? '用于调用阿里云语音服务。' : 'Used to access DashScope TTS.'
+                              )}
+                              {renderTtsRow(
+                                getTtsItem('tts.aliyun.region', { type: 'select', options: ['beijing', 'singapore'], label: isZh ? '服务区域' : 'Region' })
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </section>
+
+                      <section className="overflow-hidden rounded-xl border border-slate-200 dark:border-[#3b3b3b]">
+                        <div className="border-b border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-[#343434] dark:bg-[#1f1f1f] dark:text-[#9a9a9a]">
+                          {isZh ? '当前生效摘要' : 'Effective Summary'}
+                        </div>
+                        <div className="grid gap-2 bg-white px-4 py-3 text-xs dark:bg-[#252526]">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-slate-500 dark:text-[#9a9a9a]">{ttsBackendSummary.labelPrimary}</span>
+                            <span className="font-mono text-slate-800 dark:text-[#e6e6e6]">{ttsBackendSummary.primary}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-slate-500 dark:text-[#9a9a9a]">{ttsBackendSummary.labelSecondary}</span>
+                            <span className="font-mono text-slate-800 dark:text-[#e6e6e6]">{ttsBackendSummary.secondary}</span>
+                          </div>
+                        </div>
+                      </section>
+
+                      {ttsExtraItems.length > 0 && (
+                        <section className="overflow-hidden rounded-xl border border-slate-200 dark:border-[#3b3b3b]">
+                          <div className="border-b border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-[#343434] dark:bg-[#1f1f1f] dark:text-[#9a9a9a]">
+                            {isZh ? '扩展配置' : 'Advanced'}
+                          </div>
+                          <div className="bg-white dark:bg-[#252526]">
+                            {ttsExtraItems.map((item) => renderTtsRow(item))}
+                          </div>
+                        </section>
+                      )}
                     </div>
                   </div>
                 ) : visibleItems.length === 0 ? (

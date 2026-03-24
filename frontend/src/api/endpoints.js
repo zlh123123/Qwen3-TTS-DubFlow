@@ -226,3 +226,39 @@ export const fetchLLMModels = async (provider, customId) => {
   if (customId) params.custom_id = customId;
   return client.get('/settings/llm/models', { params });
 };
+
+// ==========================================
+// 7. 后期处理效果 (PostFX / Pedalboard)
+// ==========================================
+
+export const listPostFxPresets = async () => {
+  return client.get('/postfx/presets');
+};
+
+export const createPostFxPreset = async (data) => {
+  return client.post('/postfx/presets', data);
+};
+
+export const updatePostFxPreset = async (presetId, data) => {
+  return client.put(`/postfx/presets/${presetId}`, data);
+};
+
+export const deletePostFxPreset = async (presetId) => {
+  return client.delete(`/postfx/presets/${presetId}`);
+};
+
+export const previewPostFx = async (data) => {
+  return client.post('/postfx/preview', data);
+};
+
+export const applyPostFx = async (data) => {
+  return client.post('/postfx/apply', data);
+};
+
+export const getCharacterDefaultPostFx = async (pid) => {
+  return client.get(`/postfx/projects/${pid}/character-defaults`);
+};
+
+export const setCharacterDefaultPostFx = async (characterId, presetId) => {
+  return client.put(`/postfx/characters/${characterId}/default`, { preset_id: presetId });
+};

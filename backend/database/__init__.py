@@ -14,6 +14,8 @@ from .database import (
     ProjectCharacterRefAssetLink,
     ProjectEffectAssetLink,
     ProjectBgmAssetLink,
+    PostFxPreset,
+    CharacterPostFxDefault,
 )
 
 __all__ = [
@@ -32,4 +34,6 @@ __all__ = [
     "ProjectCharacterRefAssetLink",
     "ProjectEffectAssetLink",
     "ProjectBgmAssetLink",
+    "PostFxPreset",
+    "CharacterPostFxDefault",
 ]

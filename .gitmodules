@@ -1,3 +1,9 @@
-[submodule "models_deploy/vllm_omni"]
-	path = models_deploy/vllm_omni
-	url = https://github.com/vllm-project/vllm-omni.git
+[submodule "models_deploy/Qwen3-TTS"]
+	path = models_deploy/Qwen3-TTS
+	url = https://github.com/QwenLM/Qwen3-TTS.git
+[submodule "models_deploy/fish-speech"]
+	path = models_deploy/fish-speech
+	url = https://github.com/fishaudio/fish-speech.git
+[submodule "models_deploy/MeanAudio"]
+	path = models_deploy/MeanAudio
+	url = https://github.com/xiquan-li/MeanAudio.git
