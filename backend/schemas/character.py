@@ -37,6 +37,7 @@ class CharacterResponse(BaseModel):
     ref_audio_url: Optional[str] = None  # 前端用的完整URL
     duration: Optional[float] = None
     ref_text: Optional[str] = None
+    voice_revision: int = 1
 
     class Config:
         from_attributes = True

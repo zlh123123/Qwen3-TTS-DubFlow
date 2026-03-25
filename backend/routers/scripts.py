@@ -1,7 +1,7 @@
 import re
 import uuid
 import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -25,6 +25,11 @@ class SynthesisRequest(BaseModel):
 
 class ReorderRequest(BaseModel):
     line_ids: List[int]
+
+
+class ResolveStaleAudioRequest(BaseModel):
+    action: Literal["keep", "clear", "resynthesize"]
+    line_ids: Optional[List[int]] = None
 
 
 def _assert_project(project_id: str, db: Session) -> Project:
@@ -61,13 +66,29 @@ def _estimate_duration(text: str, speed: float) -> float:
     return max(0.8, len(content) / (6.5 * safe_speed))
 
 
-def _line_to_response(line: ScriptLine, char_map: dict[str, str]) -> ScriptLineResponse:
+def _line_to_response(
+    line: ScriptLine,
+    char_map: dict[str, str],
+    char_revision_map: Optional[Dict[str, int]] = None,
+) -> ScriptLineResponse:
     audio_url = None
     if line.audio_path:
         if line.audio_path.startswith("/static/"):
             audio_url = line.audio_path
         else:
             audio_url = f"/static/projects/{line.project_id}/outputs/{line.audio_path}"
+
+    is_stale = False
+    stale_reason = None
+    if line.status == "synthesized" and line.character_id:
+        current_rev = (char_revision_map or {}).get(line.character_id)
+        if current_rev is None:
+            is_stale = True
+            stale_reason = "character_missing"
+        elif int(line.last_synth_voice_revision or 0) != int(current_rev):
+            is_stale = True
+            stale_reason = "voice_changed"
+
     return ScriptLineResponse(
         id=line.id,
         project_id=line.project_id,
@@ -80,7 +101,141 @@ def _line_to_response(line: ScriptLine, char_map: dict[str, str]) -> ScriptLineR
         audio_url=audio_url,
         duration=line.duration,
         status=line.status or "pending",
+        last_synth_voice_revision=line.last_synth_voice_revision,
+        is_stale=is_stale,
+        stale_reason=stale_reason,
     )
+
+
+def _line_is_stale(line: ScriptLine, char_revision_map: Dict[str, int]) -> bool:
+    if line.status != "synthesized" or not line.character_id:
+        return False
+    current_rev = char_revision_map.get(line.character_id)
+    if current_rev is None:
+        return True
+    return int(line.last_synth_voice_revision or 0) != int(current_rev)
+
+
+def _build_timeline_segments(lines: List[ScriptLine], max_lines: int = 90, max_duration_sec: float = 180.0):
+    ordered = sorted(lines, key=lambda x: (x.order_index or 0, x.id or 0))
+    if not ordered:
+        return []
+
+    segments = []
+    current = []
+    current_duration = 0.0
+
+    def flush():
+        if not current:
+            return
+        segment_duration = 0.0
+        for row in current:
+            segment_duration += row.duration or _estimate_duration(row.text, row.speed or 1.0)
+        segments.append(
+            {
+                "index": len(segments),
+                "start_line_id": current[0].id,
+                "end_line_id": current[-1].id,
+                "start_order_index": current[0].order_index,
+                "end_order_index": current[-1].order_index,
+                "line_count": len(current),
+                "duration_sec": round(segment_duration, 2),
+            }
+        )
+
+    for row in ordered:
+        line_duration = row.duration or _estimate_duration(row.text, row.speed or 1.0)
+        should_split = (
+            len(current) >= max_lines
+            or (current and current_duration + line_duration > max_duration_sec)
+        )
+        if should_split:
+            flush()
+            current = []
+            current_duration = 0.0
+        current.append(row)
+        current_duration += line_duration
+    flush()
+    return segments
+
+
+def _build_pipeline_status(project_id: str, db: Session, ensure_script: bool = False):
+    project = _assert_project(project_id, db)
+    if ensure_script:
+        _bootstrap_script_lines(project, db)
+
+    chars = db.query(Character).filter(Character.project_id == project_id).all()
+    rows = (
+        db.query(ScriptLine)
+        .filter(ScriptLine.project_id == project_id)
+        .order_by(ScriptLine.order_index.asc(), ScriptLine.id.asc())
+        .all()
+    )
+
+    character_total = len(chars)
+    character_confirmed = len([c for c in chars if c.is_confirmed])
+    can_enter_studio = character_total > 0 and character_total == character_confirmed
+
+    char_map = {c.id: c.name for c in chars}
+    char_revision_map = {c.id: int(c.voice_revision or 1) for c in chars}
+    stale_rows = [line for line in rows if _line_is_stale(line, char_revision_map)]
+    stale_ids = [line.id for line in stale_rows]
+
+    stale_group = {}
+    for line in stale_rows:
+        key = line.character_id or "unknown"
+        stale_group[key] = stale_group.get(key, 0) + 1
+    stale_characters = []
+    for cid, count in stale_group.items():
+        stale_characters.append(
+            {
+                "character_id": cid if cid != "unknown" else None,
+                "character_name": char_map.get(cid, "Unknown"),
+                "line_count": count,
+            }
+        )
+    stale_characters.sort(key=lambda item: item["line_count"], reverse=True)
+    stale_lines_preview = [
+        {
+            "line_id": line.id,
+            "order_index": line.order_index,
+            "character_id": line.character_id,
+            "character_name": char_map.get(line.character_id or "", "Unknown"),
+            "text_preview": (line.text or "")[:72],
+        }
+        for line in stale_rows[:24]
+    ]
+
+    script_total = len(rows)
+    synthesized_total = len([line for line in rows if line.status == "synthesized"])
+    stale_total = len(stale_rows)
+    fresh_synthesized_total = synthesized_total - stale_total
+    can_enter_timeline = (
+        can_enter_studio
+        and script_total > 0
+        and fresh_synthesized_total == script_total
+    )
+
+    return {
+        "project_id": project_id,
+        "character_total": character_total,
+        "character_confirmed": character_confirmed,
+        "unconfirmed_characters": [
+            {"id": c.id, "name": c.name}
+            for c in chars
+            if not c.is_confirmed
+        ],
+        "script_total": script_total,
+        "synthesized_total": synthesized_total,
+        "stale_total": stale_total,
+        "fresh_synthesized_total": fresh_synthesized_total,
+        "stale_line_ids": stale_ids,
+        "stale_characters": stale_characters,
+        "stale_lines_preview": stale_lines_preview,
+        "can_enter_studio": can_enter_studio,
+        "can_enter_timeline": can_enter_timeline,
+        "timeline_segments": _build_timeline_segments(rows),
+    }
 
 
 def _bootstrap_script_lines(project: Project, db: Session):
@@ -118,7 +273,8 @@ def get_project_script(project_id: str, db: Session = Depends(get_db)):
     )
     chars = db.query(Character).filter(Character.project_id == project_id).all()
     char_map = {c.id: c.name for c in chars}
-    return [_line_to_response(row, char_map) for row in rows]
+    char_revision_map = {c.id: int(c.voice_revision or 1) for c in chars}
+    return [_line_to_response(row, char_map, char_revision_map) for row in rows]
 
 
 @router.post("/projects/{project_id}/script/lines", response_model=ScriptLineResponse)
@@ -150,6 +306,7 @@ def add_project_script_line(project_id: str, req: AddLineRequest, db: Session = 
         text="",
         speed=1.0,
         status="pending",
+        last_synth_voice_revision=None,
     )
     db.add(line)
     db.commit()
@@ -170,6 +327,7 @@ def update_script_line(line_id: int, payload: ScriptLineUpdate, db: Session = De
         row.status = "pending"
         row.audio_path = None
         row.duration = None
+        row.last_synth_voice_revision = None
     db.commit()
     db.refresh(row)
 
@@ -177,7 +335,12 @@ def update_script_line(line_id: int, payload: ScriptLineUpdate, db: Session = De
     if row.character_id:
         char = db.query(Character).filter(Character.id == row.character_id).first()
         char_name = char.name if char else None
-    return _line_to_response(row, {row.character_id or "": char_name} if char_name else {})
+    char_revision_map = {}
+    if row.character_id:
+        char_obj = db.query(Character).filter(Character.id == row.character_id).first()
+        if char_obj:
+            char_revision_map[row.character_id] = int(char_obj.voice_revision or 1)
+    return _line_to_response(row, {row.character_id or "": char_name} if char_name else {}, char_revision_map)
 
 
 @router.delete("/script/{line_id}")
@@ -226,9 +389,16 @@ def reorder_project_script(project_id: str, req: ReorderRequest, db: Session = D
 
 @router.post("/synthesis")
 def synthesize_script(req: SynthesisRequest, db: Session = Depends(get_db)):
-    _assert_project(req.project_id, db)
+    project = _assert_project(req.project_id, db)
     if not req.line_ids:
         raise HTTPException(status_code=400, detail="line_ids is required")
+
+    characters = db.query(Character).filter(Character.project_id == req.project_id).all()
+    if not characters:
+        raise HTTPException(status_code=400, detail="No characters found. Confirm characters first.")
+    if any(not c.is_confirmed for c in characters):
+        raise HTTPException(status_code=400, detail="Some characters are not confirmed")
+    char_revision_map = {c.id: int(c.voice_revision or 1) for c in characters}
 
     rows = (
         db.query(ScriptLine)
@@ -241,6 +411,10 @@ def synthesize_script(req: SynthesisRequest, db: Session = Depends(get_db)):
     for line in rows:
         line.status = "synthesized"
         line.duration = _estimate_duration(line.text, line.speed or 1.0)
+        if line.character_id:
+            line.last_synth_voice_revision = char_revision_map.get(line.character_id)
+        else:
+            line.last_synth_voice_revision = None
 
     task = Task(
         id=str(uuid.uuid4()),
@@ -252,5 +426,57 @@ def synthesize_script(req: SynthesisRequest, db: Session = Depends(get_db)):
         created_at=datetime.datetime.now(),
     )
     db.add(task)
+    project.state = "synthesizing"
+    db.flush()
+    summary = _build_pipeline_status(req.project_id, db, ensure_script=False)
+    project.state = "completed" if summary["can_enter_timeline"] else "script_ready"
     db.commit()
     return {"task_id": task.id}
+
+
+@router.get("/projects/{project_id}/pipeline-status")
+def get_project_pipeline_status(project_id: str, db: Session = Depends(get_db)):
+    return _build_pipeline_status(project_id, db, ensure_script=True)
+
+
+@router.post("/projects/{project_id}/synthesis/stale-audio/resolve")
+def resolve_stale_audio(project_id: str, req: ResolveStaleAudioRequest, db: Session = Depends(get_db)):
+    _assert_project(project_id, db)
+    characters = db.query(Character).filter(Character.project_id == project_id).all()
+    char_revision_map = {c.id: int(c.voice_revision or 1) for c in characters}
+
+    rows = (
+        db.query(ScriptLine)
+        .filter(ScriptLine.project_id == project_id)
+        .order_by(ScriptLine.order_index.asc(), ScriptLine.id.asc())
+        .all()
+    )
+    stale_rows = [line for line in rows if _line_is_stale(line, char_revision_map)]
+    if req.line_ids:
+        target_ids = set(req.line_ids)
+        stale_rows = [line for line in stale_rows if line.id in target_ids]
+    if not stale_rows:
+        return {"message": "No stale lines to resolve", "affected": 0}
+
+    affected = 0
+    for line in stale_rows:
+        if req.action == "keep":
+            line.last_synth_voice_revision = char_revision_map.get(line.character_id) if line.character_id else None
+        elif req.action == "clear":
+            line.status = "pending"
+            line.audio_path = None
+            line.duration = None
+            line.last_synth_voice_revision = None
+        elif req.action == "resynthesize":
+            line.status = "synthesized"
+            line.duration = _estimate_duration(line.text, line.speed or 1.0)
+            line.last_synth_voice_revision = char_revision_map.get(line.character_id) if line.character_id else None
+        affected += 1
+
+    project = db.query(Project).filter(Project.id == project_id).first()
+    db.flush()
+    summary_preview = _build_pipeline_status(project_id, db, ensure_script=False)
+    if project:
+        project.state = "completed" if summary_preview["can_enter_timeline"] else "script_ready"
+    db.commit()
+    return {"message": "Stale audio resolved", "affected": affected, "action": req.action}

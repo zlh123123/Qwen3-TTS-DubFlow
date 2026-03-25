@@ -37,7 +37,7 @@ export default function SettingsModal({ open, close }) {
   const { setLang, setTheme, setFontSize, t, lang } = useLang();
 
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('appearance');
   const [meta, setMeta] = useState(null);
   const [loadError, setLoadError] = useState('');
@@ -250,7 +250,7 @@ export default function SettingsModal({ open, close }) {
       try {
         const parsed = JSON.parse(trimmed);
         if (Array.isArray(parsed)) return parsed;
-      } catch (_) {
+      } catch {
         return trimmed.split(',').map((x) => x.trim()).filter(Boolean);
       }
     }
@@ -405,7 +405,7 @@ export default function SettingsModal({ open, close }) {
         desc: isZh
           ? '适合本机或局域网部署，需兼容 /v1/audio/speech。'
           : 'For local/LAN deployment. Must provide /v1/audio/speech.',
-        tag: isZh ? '推荐' : 'Recommended',
+        tag: isZh ? '兼容' : 'Compat',
       },
       {
         id: 'autodl',
@@ -573,7 +573,7 @@ export default function SettingsModal({ open, close }) {
           model: String(item.model || ''),
         }))
         .filter((item) => item.id);
-    } catch (_) {
+    } catch {
       return [];
     }
   }, [cfg, isZh]);
@@ -747,7 +747,7 @@ export default function SettingsModal({ open, close }) {
     try {
       await openUrl(href);
       return;
-    } catch (_) {
+    } catch {
       // Fall through to browser fallback (web mode / opener unavailable).
     }
     if (href.startsWith('mailto:')) {
@@ -767,13 +767,13 @@ export default function SettingsModal({ open, close }) {
       }}
     >
       <div className="flex h-[min(86vh,820px)] w-full max-w-6xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_30px_80px_rgba(2,12,27,0.35)] dark:border-[#343434] dark:bg-[#1a1a1a]">
-        <aside className="flex w-72 shrink-0 flex-col border-r border-slate-200 bg-slate-50/80 p-5 dark:border-[#343434] dark:bg-[#151515]">
+        <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-slate-50/80 p-4 dark:border-[#343434] dark:bg-[#151515]">
           <div className="flex-1 space-y-1.5">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`w-full rounded-xl px-3.5 py-3 text-left transition ${
+                className={`w-full rounded-xl px-3 py-2.5 text-left transition ${
                   activeTab === tab.id
                     ? 'bg-slate-900 text-white shadow-sm dark:bg-[#2b2b2b] dark:text-[#f0f0f0]'
                     : 'text-slate-700 hover:bg-slate-200 dark:text-[#c8c8c8] dark:hover:bg-[#232323]'
@@ -790,18 +790,6 @@ export default function SettingsModal({ open, close }) {
                 </div>
               </button>
             ))}
-          </div>
-
-          <div className="mt-4 border-t border-slate-200 pt-4 text-xs text-slate-500 dark:border-[#343434] dark:text-[#9a9a9a]">
-            <button
-              type="button"
-              onClick={() => openExternalLink('https://github.com/zlh123123/Qwen3-TTS-DubFlow')}
-              className="mb-3 inline-flex items-center gap-2 text-xs font-medium text-slate-500 transition hover:text-slate-900 dark:text-[#bdbdbd] dark:hover:text-[#f0f0f0]"
-            >
-              <Github size={14} />
-              GitHub
-            </button>
-            <div className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-[#7f7f7f]">Build v1.0.0-stable</div>
           </div>
         </aside>
 
@@ -934,7 +922,7 @@ export default function SettingsModal({ open, close }) {
                     </section>
                 </div>
                 ) : activeTab === 'llm_settings' ? (
-                  <div className="grid min-h-[460px] grid-cols-1 md:grid-cols-[200px_minmax(0,1fr)] lg:grid-cols-[220px_minmax(0,1fr)]">
+                  <div className="grid min-h-[460px] grid-cols-1 md:grid-cols-[180px_minmax(0,1fr)] lg:grid-cols-[200px_minmax(0,1fr)]">
                     <aside className="border-b border-slate-200 p-4 md:border-b-0 md:border-r dark:border-[#343434]">
                       <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-[#9a9a9a]">
                         {t('llm_provider_pick')}
@@ -1183,7 +1171,7 @@ export default function SettingsModal({ open, close }) {
                     </div>
                   </div>
                 ) : activeTab === 'tts_settings' ? (
-                  <div className="grid min-h-[460px] grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)]">
+                  <div className="grid min-h-[460px] grid-cols-1 md:grid-cols-[190px_minmax(0,1fr)] lg:grid-cols-[210px_minmax(0,1fr)]">
                     <aside className="border-b border-slate-200 p-4 md:border-b-0 md:border-r dark:border-[#343434]">
                       <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-[#9a9a9a]">
                         {isZh ? '后端类型' : 'Backend Type'}
@@ -1245,9 +1233,48 @@ export default function SettingsModal({ open, close }) {
                         </div>
                         <p className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/20 dark:text-blue-200">
                           {isZh
-                            ? '提示：当前页面用于角色语音链路配置。Fish-Speech 与 MeanAudio 的独立服务部署请参考 models_deploy/README。'
-                            : 'Note: This page configures character TTS pipeline. For standalone Fish-Speech/MeanAudio services, see models_deploy/README.'}
+                            ? '说明：本页用于角色语音链路。Fish-Speech 与 MeanAudio 为可选独立服务，不要求与角色语音同时启用。'
+                            : 'This page configures character TTS pipeline. Fish-Speech and MeanAudio are optional standalone services.'}
                         </p>
+                      </section>
+
+                      <section className="overflow-hidden rounded-xl border border-slate-200 dark:border-[#3b3b3b]">
+                        <div className="border-b border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-[#343434] dark:bg-[#1f1f1f] dark:text-[#9a9a9a]">
+                          {isZh ? '服务对接现状' : 'Service Integration'}
+                        </div>
+                        <div className="grid gap-2 bg-white px-4 py-3 text-xs dark:bg-[#252526]">
+                          <div className="flex items-start justify-between gap-3">
+                            <span className="font-semibold text-slate-800 dark:text-[#e8e8e8]">Qwen VoiceDesign / VoiceClone</span>
+                            <span className="rounded bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+                              {isZh ? '当前后端' : 'Current'}
+                            </span>
+                          </div>
+                          <p className="text-slate-500 dark:text-[#9a9a9a]">
+                            {isZh
+                              ? `用于角色音色设计/克隆链路。当前选择：${ttsActiveCard?.title || ttsBackend}。`
+                              : `Used by character voice design/clone pipeline. Current selection: ${ttsActiveCard?.title || ttsBackend}.`}
+                          </p>
+                          <div className="h-px bg-slate-200 dark:bg-[#343434]" />
+                          <div className="flex items-start justify-between gap-3">
+                            <span className="font-semibold text-slate-800 dark:text-[#e8e8e8]">Fish-Speech</span>
+                            <span className="rounded bg-slate-100 px-2 py-0.5 font-semibold text-slate-600 dark:bg-[#2f2f2f] dark:text-[#b0b0b0]">
+                              {isZh ? '独立可选' : 'Standalone Optional'}
+                            </span>
+                          </div>
+                          <p className="text-slate-500 dark:text-[#9a9a9a]">
+                            {isZh ? '提供独立 TTS API（默认 8080），当前页面不直接切换此后端。' : 'Provides standalone TTS API (default 8080); not switched directly in this page.'}
+                          </p>
+                          <div className="h-px bg-slate-200 dark:bg-[#343434]" />
+                          <div className="flex items-start justify-between gap-3">
+                            <span className="font-semibold text-slate-800 dark:text-[#e8e8e8]">MeanAudio</span>
+                            <span className="rounded bg-slate-100 px-2 py-0.5 font-semibold text-slate-600 dark:bg-[#2f2f2f] dark:text-[#b0b0b0]">
+                              {isZh ? '独立可选' : 'Standalone Optional'}
+                            </span>
+                          </div>
+                          <p className="text-slate-500 dark:text-[#9a9a9a]">
+                            {isZh ? '提供环境音 REST API（默认 8003），按需部署即可。' : 'Provides environmental sound REST API (default 8003), deploy only when needed.'}
+                          </p>
+                        </div>
                       </section>
 
                       <section className="overflow-hidden rounded-xl border border-slate-200 dark:border-[#3b3b3b]">
@@ -1368,7 +1395,7 @@ export default function SettingsModal({ open, close }) {
                   visibleItems.map((item, idx) => (
                     <div
                       key={item.key || `${activeTab}-${idx}`}
-                      className={`grid gap-3 px-5 py-4 md:grid-cols-[240px_minmax(0,1fr)] md:items-center ${
+                      className={`grid gap-3 px-5 py-4 md:grid-cols-[220px_minmax(0,1fr)] md:items-center ${
                         idx !== visibleItems.length - 1 ? 'border-b border-slate-200 dark:border-[#343434]' : ''
                       }`}
                     >

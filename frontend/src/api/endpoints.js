@@ -101,6 +101,14 @@ export const synthesize = async (data) => {
   return client.post('/synthesis', data);
 };
 
+export const getProjectPipelineStatus = async (pid) => {
+  return client.get(`/projects/${pid}/pipeline-status`);
+};
+
+export const resolveStaleAudio = async (pid, data) => {
+  return client.post(`/projects/${pid}/synthesis/stale-audio/resolve`, data);
+};
+
 // ==========================================
 // 4. 任务系统 (Task Polling)
 // ==========================================

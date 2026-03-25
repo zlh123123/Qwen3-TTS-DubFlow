@@ -63,6 +63,9 @@ export default function Studio() {
   const [synthLineId, setSynthLineId] = useState('');
   const [synthAllLoading, setSynthAllLoading] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [pipeline, setPipeline] = useState(null);
+  const [staleModalOpen, setStaleModalOpen] = useState(false);
+  const [staleResolvingAction, setStaleResolvingAction] = useState('');
 
   const listRef = useRef(null);
   const [listScrollTop, setListScrollTop] = useState(0);
@@ -105,19 +108,30 @@ export default function Studio() {
   const refreshData = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [charsRes, scriptRes] = await Promise.all([
+      const [charsRes, scriptRes, pipelineRes] = await Promise.all([
         API.getCharacters(pid),
         API.getScript(pid),
+        API.getProjectPipelineStatus(pid),
       ]);
       const nextChars = asArray(charsRes);
       const nextLines = asArray(scriptRes).sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+      const nextPipeline = pipelineRes?.data || pipelineRes;
       setChars(nextChars);
       setLines(nextLines);
+      setPipeline(nextPipeline);
       setDirtyIds((prev) => prev.filter((id) => nextLines.some((line) => line.id === id)));
       setActiveLineId((prev) => {
         if (prev && nextLines.some((line) => line.id === prev)) return prev;
         return nextLines[0]?.id || null;
       });
+      if (nextPipeline?.stale_total > 0) {
+        setStaleModalOpen(true);
+      }
+      if (nextPipeline && nextPipeline.can_enter_studio === false) {
+        const msg = isZh ? '请先回角色工坊确认全部角色音色。' : 'Please confirm all character voices in workshop first.';
+        setNotice(msg);
+        setTimeout(() => nav(`/project/${pid}/workshop`), 600);
+      }
     } catch (err) {
       console.error('Load studio data failed:', err);
       setNotice(isZh ? '演播室数据加载失败。' : 'Failed to load studio data.');
@@ -262,8 +276,37 @@ export default function Studio() {
   };
 
   const synthesizeAllPending = () => {
+    if (pipeline?.stale_total > 0) {
+      setStaleModalOpen(true);
+      setNotice(isZh ? '检测到过期音频，请先处理。' : 'Stale audio detected. Resolve it first.');
+      return;
+    }
     const pendingIds = orderedLines.filter((line) => line.status !== 'synthesized').map((line) => line.id);
     void synthesizeLines(pendingIds);
+  };
+
+  const handleResolveStaleAudio = async (action) => {
+    setStaleResolvingAction(action);
+    try {
+      await API.resolveStaleAudio(pid, { action });
+      await refreshData(true);
+      const latest = await API.getProjectPipelineStatus(pid);
+      const latestPipeline = latest?.data || latest;
+      setPipeline(latestPipeline);
+      setStaleModalOpen((latestPipeline?.stale_total || 0) > 0);
+      if (action === 'keep') {
+        setNotice(isZh ? '已保留现有音频并清除过期标记。' : 'Kept current audio and cleared stale marks.');
+      } else if (action === 'clear') {
+        setNotice(isZh ? '已清空过期音频，相关台词变为待合成。' : 'Cleared stale audio, lines are pending now.');
+      } else {
+        setNotice(isZh ? '已重新生成过期台词。' : 'Regenerated stale lines.');
+      }
+    } catch (error) {
+      console.error('Resolve stale audio failed:', error);
+      setNotice(isZh ? '处理过期音频失败。' : 'Failed to resolve stale audio.');
+    } finally {
+      setStaleResolvingAction('');
+    }
   };
 
   const activeAudioUrl = resolveAudioUrl(activeLine?.audio_url || activeLine?.audio_path);
@@ -318,6 +361,76 @@ export default function Studio() {
         </div>
       )}
 
+      {staleModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-xl dark:border-[#2d2d2d] dark:bg-[#101010]">
+            <h3 className="text-base font-semibold text-slate-900 dark:text-[#f0f0f0]">
+              {isZh ? '检测到过期音频' : 'Stale Audio Detected'}
+            </h3>
+            <p className="mt-2 text-sm text-slate-600 dark:text-[#b8b8b8]">
+              {isZh
+                ? `有 ${pipeline?.stale_total || 0} 条台词使用了旧音色。请选择处理方式：`
+                : `${pipeline?.stale_total || 0} lines were synthesized with outdated voices. Choose how to handle them:`}
+            </p>
+            {!!pipeline?.stale_characters?.length && (
+              <div className="mt-3 max-h-36 overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs dark:border-[#323232] dark:bg-[#171717]">
+                {pipeline.stale_characters.map((item) => (
+                  <div key={`${item.character_id || 'unknown'}_${item.character_name}`} className="flex items-center justify-between py-1 text-slate-700 dark:text-[#d0d0d0]">
+                    <span>{item.character_name}</span>
+                    <span>{item.line_count} {isZh ? '条' : 'lines'}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {!!pipeline?.stale_lines_preview?.length && (
+              <div className="mt-3 max-h-44 overflow-auto rounded-lg border border-slate-200 bg-white p-2 text-xs dark:border-[#323232] dark:bg-[#151515]">
+                <div className="mb-1 font-semibold text-slate-600 dark:text-[#b8b8b8]">
+                  {isZh ? '受影响台词（预览）' : 'Impacted lines (preview)'}
+                </div>
+                {pipeline.stale_lines_preview.map((line) => (
+                  <div
+                    key={line.line_id}
+                    className="rounded-md px-2 py-1 text-slate-700 even:bg-slate-50 dark:text-[#d3d3d3] dark:even:bg-[#1b1b1b]"
+                  >
+                    <span className="font-semibold">#{line.order_index}</span>
+                    <span className="mx-1">·</span>
+                    <span>{line.character_name || (isZh ? '未指定角色' : 'No Speaker')}</span>
+                    <span className="mx-1">·</span>
+                    <span className="opacity-80">{line.text_preview}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <button
+                onClick={() => handleResolveStaleAudio('keep')}
+                disabled={!!staleResolvingAction}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-45 dark:border-[#343434] dark:bg-[#1b1b1b] dark:text-[#e0e0e0] dark:hover:bg-[#242424]"
+              >
+                {staleResolvingAction === 'keep' ? <Loader2 size={14} className="mr-1 inline animate-spin" /> : null}
+                {isZh ? '保留现有音频' : 'Keep Current'}
+              </button>
+              <button
+                onClick={() => handleResolveStaleAudio('clear')}
+                disabled={!!staleResolvingAction}
+                className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-100 disabled:opacity-45 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300"
+              >
+                {staleResolvingAction === 'clear' ? <Loader2 size={14} className="mr-1 inline animate-spin" /> : null}
+                {isZh ? '删除过期音频' : 'Clear Stale'}
+              </button>
+              <button
+                onClick={() => handleResolveStaleAudio('resynthesize')}
+                disabled={!!staleResolvingAction}
+                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-45 dark:bg-[#f2f2f2] dark:text-[#111111] dark:hover:bg-[#d8d8d8]"
+              >
+                {staleResolvingAction === 'resynthesize' ? <Loader2 size={14} className="mr-1 inline animate-spin" /> : null}
+                {isZh ? '重新合成过期台词' : 'Regenerate Stale'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="shrink-0 border-b border-slate-200 bg-white px-6 py-3 dark:border-[#202020] dark:bg-[#090909]">
         <div className="flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
@@ -348,7 +461,13 @@ export default function Studio() {
               {isZh ? '素材库' : 'Assets'}
             </button>
             <button
-              onClick={() => nav(`/project/${pid}/timeline`)}
+              onClick={() => {
+                if (pipeline?.can_enter_timeline) {
+                  nav(`/project/${pid}/timeline`);
+                } else {
+                  setNotice(isZh ? '请先完成批量合成，并处理过期音频。' : 'Finish synthesis and resolve stale audio first.');
+                }
+              }}
               className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-[#333333] dark:bg-[#151515] dark:text-[#e2e2e2] dark:hover:bg-[#1f1f1f]"
             >
               <Clapperboard size={14} />
@@ -367,6 +486,13 @@ export default function Studio() {
       </header>
 
       <main className="grid min-h-0 flex-1 grid-cols-12 gap-4 px-6 py-4">
+        {!!pipeline?.stale_total && (
+          <div className="col-span-12 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-700 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-300">
+            {isZh
+              ? `检测到 ${pipeline.stale_total} 条过期音频。涉及角色：${(pipeline.stale_characters || []).map((x) => x.character_name).join('、')}。请先处理后再进入剪辑台。`
+              : `${pipeline.stale_total} stale lines detected. Characters: ${(pipeline.stale_characters || []).map((x) => x.character_name).join(', ')}. Resolve before entering timeline.`}
+          </div>
+        )}
         <section className="col-span-4 min-h-0 overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-[#212121] dark:bg-[#090909]">
           <div className="border-b border-slate-200 p-3 dark:border-[#212121]">
             <div className="relative">

@@ -9,6 +9,8 @@ import uuid
 
 router = APIRouter(prefix="/api/characters", tags=["Characters"])
 
+VOICE_IMPACT_FIELDS = {"gender", "age", "description", "prompt", "ref_text", "ref_audio_path"}
+
 @router.post("/", response_model=CharacterResponse)
 def create_character(character: CharacterCreate, db: Session = Depends(get_db)):
     new_char = Character(
@@ -20,7 +22,8 @@ def create_character(character: CharacterCreate, db: Session = Depends(get_db)):
         description=character.description,
         prompt=character.prompt,
         ref_text=character.ref_text,
-        ref_audio_path=None
+        ref_audio_path=None,
+        voice_revision=1,
     )
     db.add(new_char)
     db.commit()
@@ -36,8 +39,15 @@ def update_character(character_id: str, update: CharacterUpdate, db: Session = D
     char = db.query(Character).filter(Character.id == character_id).first()
     if not char:
         raise HTTPException(status_code=404, detail="Character not found")
-    for key, value in update.model_dump(exclude_unset=True).items():
+    payload = update.model_dump(exclude_unset=True)
+    voice_changed = False
+    for key, value in payload.items():
+        if key in VOICE_IMPACT_FIELDS and getattr(char, key) != value:
+            voice_changed = True
         setattr(char, key, value)
+    if voice_changed:
+        char.voice_revision = int(char.voice_revision or 1) + 1
+        char.is_confirmed = False
     db.commit()
     db.refresh(char)
     if char.ref_audio_path:

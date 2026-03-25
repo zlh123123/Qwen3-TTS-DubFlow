@@ -1,6 +1,6 @@
 # 概述
 
-核心流程：用户上传小说 -> LLM 分析角色 -> 用户调整角色并生成/导入参考音 -> 进入演播室做台词与音频资产管理 -> 逐句/批量合成（脚本与合成接口待补齐）。
+核心流程：用户上传小说 -> LLM 分析角色 -> 用户确认角色音色 -> 进入演播室做台词映射与批量合成 -> 全部完成后进入剪辑台做时间轨与后期处理。
 
 技术栈：
 
@@ -20,7 +20,8 @@ Narratis/
 │       ├── api/endpoints.js
 │       ├── pages/CreateProject.jsx
 │       ├── pages/Workshop.jsx
-│       └── pages/Studio.jsx
+│       ├── pages/Studio.jsx
+│       └── pages/TimelineBoard.jsx
 │
 ├── backend/
 │   ├── main.py
@@ -61,16 +62,37 @@ Narratis/
 - 角色试听（异步任务）
 - 角色音色确认（可回退，字段变更后要求重确认）
 
-## 页面 3：演播室（UI 已有，后端脚本/合成接口待补齐）
+## 页面 3：演播室（已接入脚本与合成接口）
 
 - 台词流编辑（前端有对应调用）
-- 单句/批量合成按钮（后端接口暂未实现）
-- 时间轨（规划中）：支持类似 Premiere Pro 的多轨排布（人声轨 / BGM 轨 / 环境音轨 / 音效轨）、片段拖拽、对齐吸附、裁剪、淡入淡出和音量包络
-- 时间轨不在当前迭代实现，仅先在产品与 API 设计中占位
+- 单句/批量合成
+- 过期音频检测与处理（保留 / 清空 / 重新合成）
+
+## 页面 4：剪辑台（Timeline）
+
+- 默认按文章顺序上轨（对白轨）
+- 长文本自动分段（避免单屏时间轴过长）
+- 仅当“角色已确认 + 批量合成完成 + 无过期音频”时允许进入
 
 ## 设置
 
 - LLM / TTS / 外观配置读写
+
+## 流程门禁（当前实现）
+
+1. 角色工坊 -> 演播室
+- 必须存在角色且全部 `is_confirmed=true`
+
+2. 演播室 -> 剪辑台
+- 必须所有台词都已合成
+- 且不存在过期音频（角色音色版本变化导致）
+
+3. 已合成后改音色
+- 若角色音色关键字段变更（如 `prompt/ref_text/ref_audio_path/description/...`），角色会自动退回未确认并增加音色版本
+- 已合成台词会标记为 stale（过期），进入演播室时弹窗要求处理：
+  - `keep`：保留音频并更新版本对齐
+  - `clear`：清空过期音频并回到待合成
+  - `resynthesize`：按新音色重合成过期台词
 
 ---
 
@@ -129,9 +151,25 @@ Narratis/
 | description | Text | 人设描述 |
 | prompt | Text | 音色提示 |
 | is_confirmed | Boolean | 是否确认 |
+| voice_revision | Integer | 音色版本（字段变化自动 +1） |
 | ref_audio_path | String | 当前确认参考音 |
 | duration | Float | 时长 |
 | ref_text | String | 参考文本 |
+
+## ScriptLine
+
+| 字段名 | 类型 | 说明 |
+|---|---|---|
+| id | Integer | 主键 |
+| project_id | String(FK) | 关联 Project（CASCADE） |
+| character_id | String(FK) | 关联 Character（SET NULL） |
+| order_index | Integer | 台词顺序 |
+| text | Text | 台词文本 |
+| speed | Float | 语速倍率 |
+| audio_path | String | 合成音频路径 |
+| duration | Float | 音频时长 |
+| status | String | `pending` / `processing` / `synthesized` / `failed` |
+| last_synth_voice_revision | Integer | 最后一次合成使用的角色音色版本 |
 
 ## CharacterRefAsset（全局角色参考音资产）
 
@@ -305,6 +343,63 @@ Narratis/
 - `POST /api/characters/{character_id}/voice`
 - 当前实现：不接 body，直接读取角色当前字段
 - 返回：`{ "task_id": "..." }`
+
+---
+
+## 页面 3：演播室（Script / Synthesis）
+
+### 获取剧本台词
+- `GET /api/projects/{project_id}/script`
+- 返回字段包含：
+  - `is_stale`（是否过期）
+  - `stale_reason`（`voice_changed` / `character_missing`）
+  - `last_synth_voice_revision`
+
+### 新增台词
+- `POST /api/projects/{project_id}/script/lines`
+
+### 更新台词
+- `PUT /api/script/{line_id}`
+- 若修改 `text/character_id/speed`，会自动把该行重置为待合成
+
+### 删除台词
+- `DELETE /api/script/{line_id}`
+
+### 重排台词顺序
+- `PUT /api/projects/{project_id}/script/reorder`
+
+### 批量/单句合成
+- `POST /api/synthesis`
+- 请求示例：
+```json
+{
+  "project_id": "project_uuid",
+  "line_ids": [1001, 1002, 1003]
+}
+```
+
+### 获取流程状态（门禁核心接口）
+- `GET /api/projects/{project_id}/pipeline-status`
+- 关键返回字段：
+  - `can_enter_studio`
+  - `can_enter_timeline`
+  - `stale_total`
+  - `stale_characters`
+  - `stale_lines_preview`
+  - `timeline_segments`
+
+### 处理过期音频
+- `POST /api/projects/{project_id}/synthesis/stale-audio/resolve`
+- 请求示例：
+```json
+{
+  "action": "keep"
+}
+```
+- `action` 可选：
+  - `keep`
+  - `clear`
+  - `resynthesize`
 
 ---
 
@@ -576,18 +671,17 @@ Narratis/
 
 # 当前缺口（未实现接口）
 
-- `GET /api/projects/{project_id}/script`
-- `POST /api/projects/{project_id}/script/parse`
-- `PUT /api/script/{line_id}`
-- `POST /api/synthesis`
+- `GET /api/projects/{project_id}/timeline`
+- `PUT /api/projects/{project_id}/timeline`
+- `POST /api/projects/{project_id}/timeline/render`
 
-以上前端已有调用，后端路由仍待补。
+说明：当前剪辑台以本地前端状态 + PostFX 接口为主，上述“工程化时间轨存储/渲染导出”接口仍是下一阶段规划。
 
 ---
 
 # 未来更新内容（建议）
 
-- 脚本切分与合成接口补齐
+- 时间轨工程持久化与渲染导出接口落地
 - 资产库标签/搜索/去重
 - 角色参考音历史版本与回滚
 - 任务取消与失败恢复

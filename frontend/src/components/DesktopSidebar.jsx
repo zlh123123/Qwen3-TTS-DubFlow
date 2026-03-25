@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Home, Users, Mic2, Clapperboard, FolderOpen, Settings } from 'lucide-react';
+import * as API from '../api/endpoints';
 
 export default function DesktopSidebar({ onOpenSettings }) {
   const location = useLocation();
@@ -8,6 +9,32 @@ export default function DesktopSidebar({ onOpenSettings }) {
 
   const match = location.pathname.match(/^\/project\/([^/]+)/);
   const pid = match?.[1] || null;
+  const [pipeline, setPipeline] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!pid) {
+      setPipeline(null);
+      return undefined;
+    }
+    const load = async () => {
+      try {
+        const resp = await API.getProjectPipelineStatus(pid);
+        if (!cancelled) setPipeline(resp?.data || resp);
+      } catch {
+        if (!cancelled) setPipeline(null);
+      }
+    };
+    load();
+    const timer = setInterval(load, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [pid]);
+
+  const studioBlocked = !!pid && !(pipeline?.can_enter_studio ?? false);
+  const timelineBlocked = !!pid && !(pipeline?.can_enter_timeline ?? false);
 
   const mainItems = [
     {
@@ -32,7 +59,8 @@ export default function DesktopSidebar({ onOpenSettings }) {
       icon: Mic2,
       active: location.pathname.includes('/studio'),
       onClick: () => pid && nav(`/project/${pid}/studio`),
-      disabled: !pid,
+      disabled: !pid || studioBlocked,
+      disabledReason: !pid ? '请先进入项目' : '请先确认全部角色音色',
     },
     {
       key: 'timeline',
@@ -40,7 +68,8 @@ export default function DesktopSidebar({ onOpenSettings }) {
       icon: Clapperboard,
       active: location.pathname.includes('/timeline'),
       onClick: () => pid && nav(`/project/${pid}/timeline`),
-      disabled: !pid,
+      disabled: !pid || timelineBlocked,
+      disabledReason: !pid ? '请先进入项目' : '请先完成批量合成并处理过期音频',
     },
     {
       key: 'assets',
@@ -49,6 +78,7 @@ export default function DesktopSidebar({ onOpenSettings }) {
       active: location.pathname.includes('/assets'),
       onClick: () => pid && nav(`/project/${pid}/assets`),
       disabled: !pid,
+      disabledReason: '请先进入项目',
     }
   ];
 
@@ -71,7 +101,7 @@ export default function DesktopSidebar({ onOpenSettings }) {
               key={item.key}
               onClick={item.onClick}
               disabled={item.disabled}
-              title={item.disabled ? `${item.label}（请先进入项目）` : item.label}
+              title={item.disabled ? `${item.label}（${item.disabledReason || '暂不可用'}）` : item.label}
               className={`group relative flex h-12 w-12 items-center justify-center rounded-xl border transition-all ${
                 item.active
                   ? 'border-[#D3BC8E]/80 bg-[#D3BC8E]/35 text-[#3B4255] shadow-md dark:border-[#8f7a54] dark:bg-[#3a3223] dark:text-[#f0dfba]'

@@ -14,6 +14,10 @@ class ScriptLineUpdate(BaseModel):
     character_id: Optional[str] = None
     text: Optional[str] = None
     speed: Optional[float] = None
+    audio_path: Optional[str] = None
+    status: Optional[str] = None
+    duration: Optional[float] = None
+    last_synth_voice_revision: Optional[int] = None
 
 # back->front: 台词响应
 class ScriptLineResponse(BaseModel):
@@ -28,6 +32,9 @@ class ScriptLineResponse(BaseModel):
     audio_url: Optional[str] = None  # 前端用的完整URL
     duration: Optional[float] = None
     status: str  # pending/synthesized/failed
+    last_synth_voice_revision: Optional[int] = None
+    is_stale: bool = False
+    stale_reason: Optional[str] = None
 
     class Config:
         from_attributes = True

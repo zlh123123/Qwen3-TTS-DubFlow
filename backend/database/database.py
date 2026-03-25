@@ -125,6 +125,7 @@ class Character(Base):
     ref_audio_path = Column(String, nullable=True)
     duration = Column(Float, nullable=True)
     ref_text = Column(String, nullable=True)
+    voice_revision = Column(Integer, default=1)
 
     project = relationship("Project", back_populates="characters")
     character_ref_links = relationship("ProjectCharacterRefAssetLink", back_populates="character")
@@ -149,6 +150,7 @@ class ScriptLine(Base):
     audio_path = Column(String, nullable=True)
     duration = Column(Float, nullable=True)
     status = Column(String, default="pending")
+    last_synth_voice_revision = Column(Integer, nullable=True)
 
     project = relationship("Project", back_populates="script_lines")
 

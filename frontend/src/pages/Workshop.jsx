@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ChevronRight, Trash2, RefreshCw, Plus, 
-  Mic, Play, Pause, Shield, CheckCircle2, Loader2, Hourglass, X, FolderOpen
+  Mic, Play, Pause, Shield, CheckCircle2, Loader2, Hourglass, X, FolderOpen, AlertCircle
 } from 'lucide-react';
 import { useTaskPoller } from '../hooks/useTaskPoller';
 import * as API from '../api/endpoints';
@@ -38,6 +38,7 @@ export default function Workshop() {
   const [applyingRef, setApplyingRef] = useState(false);
   const [refSourceMode, setRefSourceMode] = useState('tts');
   const [avatarErrorMap, setAvatarErrorMap] = useState({});
+  const [notice, setNotice] = useState('');
 
   // 弹窗控制
   const [showAddModal, setShowAddModal] = useState(false);
@@ -173,6 +174,12 @@ export default function Workshop() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!notice) return undefined;
+    const timer = setTimeout(() => setNotice(''), 2600);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   // =================辅助函数=================
 
@@ -500,6 +507,24 @@ export default function Workshop() {
     }
   };
 
+  const goStudioWithGuard = () => {
+    if (chars.length === 0) {
+      setNotice(isZh ? '请先创建并确认至少一个角色。' : 'Create and confirm at least one character first.');
+      return;
+    }
+    const unconfirmed = chars.filter((c) => !c.is_confirmed).map((c) => c.name);
+    if (unconfirmed.length > 0) {
+      const preview = unconfirmed.slice(0, 4).join('、');
+      setNotice(
+        isZh
+          ? `以下角色尚未确认音色：${preview}${unconfirmed.length > 4 ? ' 等' : ''}`
+          : `Unconfirmed voices: ${unconfirmed.slice(0, 4).join(', ')}${unconfirmed.length > 4 ? '...' : ''}`
+      );
+      return;
+    }
+    nav(`/project/${pid}/studio`);
+  };
+
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center bg-slate-100 text-slate-700 dark:bg-[#111111] dark:text-[#d8d8d8]">
@@ -513,6 +538,14 @@ export default function Workshop() {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-slate-100 text-slate-700 dark:bg-[#111111] dark:text-[#d8d8d8]">
+      {!!notice && (
+        <div className="fixed left-1/2 top-6 z-50 -translate-x-1/2">
+          <div className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 shadow-sm dark:border-[#6e5a34] dark:bg-[#2f2719] dark:text-[#f0d9a7]">
+            <AlertCircle size={14} />
+            <span>{notice}</span>
+          </div>
+        </div>
+      )}
       
       {/* =================弹窗 Modal================= */}
       {showAddModal && (
@@ -636,7 +669,7 @@ export default function Workshop() {
           </div>
         </div>
         <button
-          onClick={() => nav(`/project/${pid}/studio`)}
+          onClick={goStudioWithGuard}
           className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 dark:bg-[#f2f2f2] dark:text-[#111111] dark:hover:bg-[#d9d9d9]"
         >
           <span>{isZh ? '进入演播室' : 'Go to Studio'}</span>

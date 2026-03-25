@@ -23,6 +23,8 @@ const EFFECT_TRACK_HEIGHT = 112;
 const TIMELINE_PADDING_RIGHT = 240;
 const MIN_CLIP_DURATION = 0.6;
 const PLAYHEAD_STEP = 0.2;
+const MAX_SEGMENT_SECONDS = 180;
+const MAX_SEGMENT_LINES = 90;
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
@@ -148,6 +150,42 @@ const findVisibleStartIndex = (clips, visibleStart) => {
   return low;
 };
 
+const buildTimelineSegments = (clips) => {
+  const ordered = [...clips].sort((a, b) => a.start - b.start);
+  if (ordered.length === 0) {
+    return [{ index: 0, start: 0, end: 30, lineStart: 0, lineEnd: 0, lineCount: 0 }];
+  }
+
+  const segments = [];
+  let startIdx = 0;
+  while (startIdx < ordered.length) {
+    const segStart = ordered[startIdx].start;
+    let endIdx = startIdx;
+    let lastEnd = ordered[startIdx].start + ordered[startIdx].duration;
+    while (endIdx + 1 < ordered.length) {
+      const next = ordered[endIdx + 1];
+      const nextEnd = next.start + next.duration;
+      const lineCount = endIdx + 1 - startIdx + 1;
+      const exceedsLines = lineCount > MAX_SEGMENT_LINES;
+      const exceedsDuration = nextEnd - segStart > MAX_SEGMENT_SECONDS;
+      if (exceedsLines || exceedsDuration) break;
+      endIdx += 1;
+      lastEnd = nextEnd;
+    }
+    const safeEnd = Math.max(segStart + 20, lastEnd);
+    segments.push({
+      index: segments.length,
+      start: segStart,
+      end: safeEnd,
+      lineStart: startIdx + 1,
+      lineEnd: endIdx + 1,
+      lineCount: endIdx - startIdx + 1,
+    });
+    startIdx = endIdx + 1;
+  }
+  return segments;
+};
+
 const hashSeed = (input) => {
   const raw = String(input || 'seed');
   let h = 2166136261;
@@ -203,6 +241,7 @@ export default function TimelineBoard() {
   const [characters, setCharacters] = useState([]);
   const [effects, setEffects] = useState([]);
   const [effectClips, setEffectClips] = useState([]);
+  const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
 
   const [effectSearch, setEffectSearch] = useState('');
   const [selectedClip, setSelectedClip] = useState(null); // {type,id}
@@ -250,6 +289,7 @@ export default function TimelineBoard() {
       const clip = {
         id: line.id,
         lineId: line.id,
+        orderIndex: line.order_index || 0,
         characterId: line.character_id || null,
         start: cursor,
         duration,
@@ -262,6 +302,23 @@ export default function TimelineBoard() {
       return clip;
     });
   }, [scriptLines, charMap, isZh]);
+
+  const timelineSegments = useMemo(() => buildTimelineSegments(dialogueClips), [dialogueClips]);
+
+  useEffect(() => {
+    setActiveSegmentIndex((prev) => clamp(prev, 0, Math.max(0, timelineSegments.length - 1)));
+  }, [timelineSegments.length]);
+
+  const activeSegment = useMemo(
+    () =>
+      timelineSegments[activeSegmentIndex] ||
+      timelineSegments[0] || { index: 0, start: 0, end: 30, lineStart: 0, lineEnd: 0, lineCount: 0 },
+    [timelineSegments, activeSegmentIndex]
+  );
+
+  const segmentStart = activeSegment.start;
+  const segmentEnd = activeSegment.end;
+  const segmentDuration = Math.max(20, segmentEnd - segmentStart);
 
   const displayedEffectClips = useMemo(() => {
     if (!dragPreview) return effectClips;
@@ -303,10 +360,41 @@ export default function TimelineBoard() {
     return effects.filter((item) => (item.display_name || '').toLowerCase().includes(q));
   }, [effects, effectSearch]);
 
-  const dialogueEnd = dialogueClips.reduce((max, clip) => Math.max(max, clip.start + clip.duration), 0);
-  const effectsEnd = displayedEffectClips.reduce((max, clip) => Math.max(max, clip.start + clip.duration), 0);
-  const timelineDuration = Math.max(30, dialogueEnd + 2, effectsEnd + 3);
+  const timelineDuration = segmentDuration;
   const timelineWidth = timelineDuration * pxPerSec + TIMELINE_PADDING_RIGHT;
+
+  useEffect(() => {
+    setPlayhead((prev) => clamp(prev, segmentStart, segmentEnd));
+  }, [segmentStart, segmentEnd]);
+
+  useEffect(() => {
+    if (!scrollerRef.current) return;
+    scrollerRef.current.scrollLeft = 0;
+    setViewport((prev) => ({ ...prev, left: 0 }));
+  }, [activeSegmentIndex]);
+
+  useEffect(() => {
+    if (!selectedClip) return;
+    if (selectedClip.type === 'dialogue') {
+      const clip = dialogueClips.find((item) => item.id === selectedClip.id);
+      if (!clip) {
+        setSelectedClip(null);
+        return;
+      }
+      const inSegment = clip.start + clip.duration > segmentStart && clip.start < segmentEnd;
+      if (!inSegment) setSelectedClip(null);
+      return;
+    }
+    if (selectedClip.type === 'effect') {
+      const clip = effectClips.find((item) => item.id === selectedClip.id);
+      if (!clip) {
+        setSelectedClip(null);
+        return;
+      }
+      const inSegment = clip.start + clip.duration > segmentStart && clip.start < segmentEnd;
+      if (!inSegment) setSelectedClip(null);
+    }
+  }, [selectedClip, dialogueClips, effectClips, segmentStart, segmentEnd]);
 
   const timeTickStep = useMemo(() => {
     if (pxPerSec >= 92) return 1;
@@ -321,13 +409,13 @@ export default function TimelineBoard() {
   }, [timelineDuration, timeTickStep]);
 
   const visibleRange = useMemo(() => {
-    const leftSec = viewport.left / pxPerSec;
-    const rightSec = (viewport.left + viewport.width) / pxPerSec;
+    const leftSec = segmentStart + viewport.left / pxPerSec;
+    const rightSec = segmentStart + (viewport.left + viewport.width) / pxPerSec;
     return {
-      start: Math.max(0, leftSec - 2.5),
-      end: rightSec + 2.5,
+      start: Math.max(segmentStart, leftSec - 2.5),
+      end: Math.min(segmentEnd, rightSec + 2.5),
     };
-  }, [viewport.left, viewport.width, pxPerSec]);
+  }, [viewport.left, viewport.width, pxPerSec, segmentStart, segmentEnd]);
 
   const visibleDialogueClips = useMemo(() => {
     if (dialogueClips.length === 0) return [];
@@ -347,6 +435,14 @@ export default function TimelineBoard() {
         (clip) => clip.start + clip.duration >= visibleRange.start && clip.start <= visibleRange.end
       ),
     [displayedEffectClips, visibleRange.start, visibleRange.end]
+  );
+
+  const segmentEffectCount = useMemo(
+    () =>
+      displayedEffectClips.filter(
+        (clip) => clip.start + clip.duration > segmentStart && clip.start < segmentEnd
+      ).length,
+    [displayedEffectClips, segmentStart, segmentEnd]
   );
 
   useEffect(() => {
@@ -420,6 +516,18 @@ export default function TimelineBoard() {
     const load = async () => {
       setLoading(true);
       try {
+        const pipelineRes = await API.getProjectPipelineStatus(pid);
+        const nextPipeline = pipelineRes?.data || pipelineRes;
+        if (nextPipeline?.can_enter_timeline === false) {
+          setNotice(
+            isZh
+              ? '请先在演播室完成批量合成，并处理过期音频后再进入剪辑台。'
+              : 'Finish synthesis and resolve stale audio in Studio before opening timeline.'
+          );
+          setTimeout(() => nav(`/project/${pid}/studio`), 450);
+          return;
+        }
+
         const [scriptRes, charRes, effectRes, presetsRes, defaultsRes] = await Promise.all([
           API.getScript(pid),
           API.getCharacters(pid),
@@ -466,7 +574,7 @@ export default function TimelineBoard() {
       }
     };
     load();
-  }, [pid, isZh]);
+  }, [pid, isZh, nav]);
 
   useEffect(() => {
     try {
@@ -590,16 +698,25 @@ export default function TimelineBoard() {
     const computePatch = (drag, deltaSec) => {
       if (!drag) return null;
       if (drag.mode === 'move') {
-        return { start: Math.max(0, drag.originStart + deltaSec), duration: drag.originDuration };
+        const maxStart = Math.max(segmentStart, segmentEnd - MIN_CLIP_DURATION);
+        return {
+          start: clamp(drag.originStart + deltaSec, segmentStart, maxStart),
+          duration: drag.originDuration,
+        };
       }
       if (drag.mode === 'resize-start') {
         const maxStart = drag.originStart + drag.originDuration - MIN_CLIP_DURATION;
-        const nextStart = clamp(drag.originStart + deltaSec, 0, maxStart);
+        const nextStart = clamp(drag.originStart + deltaSec, segmentStart, maxStart);
         const nextDuration = Math.max(MIN_CLIP_DURATION, drag.originDuration - (nextStart - drag.originStart));
         return { start: nextStart, duration: nextDuration };
       }
       if (drag.mode === 'resize-end') {
-        const nextDuration = Math.max(MIN_CLIP_DURATION, drag.originDuration + deltaSec);
+        const nextEnd = clamp(
+          drag.originStart + drag.originDuration + deltaSec,
+          drag.originStart + MIN_CLIP_DURATION,
+          segmentEnd
+        );
+        const nextDuration = Math.max(MIN_CLIP_DURATION, nextEnd - drag.originStart);
         return { start: drag.originStart, duration: nextDuration };
       }
       return null;
@@ -671,7 +788,7 @@ export default function TimelineBoard() {
       setDragPreview(null);
       stopPreview();
     };
-  }, [pxPerSec]);
+  }, [pxPerSec, segmentStart, segmentEnd]);
 
   useEffect(() => {
     if (!isPlaying) {
@@ -684,9 +801,9 @@ export default function TimelineBoard() {
     playheadTimerRef.current = setInterval(() => {
       setPlayhead((prev) => {
         const next = prev + PLAYHEAD_STEP;
-        if (next >= timelineDuration) {
+        if (next >= segmentEnd) {
           setIsPlaying(false);
-          return timelineDuration;
+          return segmentEnd;
         }
         return next;
       });
@@ -697,12 +814,23 @@ export default function TimelineBoard() {
         playheadTimerRef.current = null;
       }
     };
-  }, [isPlaying, timelineDuration]);
+  }, [isPlaying, segmentEnd]);
 
   const refreshDialogueTrack = async () => {
     try {
       const scriptRes = await API.getScript(pid);
       setScriptLines(asArray(scriptRes));
+      const pipelineRes = await API.getProjectPipelineStatus(pid);
+      const nextPipeline = pipelineRes?.data || pipelineRes;
+      if (nextPipeline?.can_enter_timeline === false) {
+        setNotice(
+          isZh
+            ? '流程状态发生变化，请先返回演播室处理后再进入剪辑台。'
+            : 'Pipeline state changed. Please return to Studio before editing timeline.'
+        );
+        setTimeout(() => nav(`/project/${pid}/studio`), 450);
+        return;
+      }
       setNotice(isZh ? '已同步对白轨。' : 'Dialogue synced.');
     } catch (error) {
       console.error('Sync dialogue failed:', error);
@@ -714,11 +842,13 @@ export default function TimelineBoard() {
     if (!trackRef.current || !scrollerRef.current) return;
     const rect = trackRef.current.getBoundingClientRect();
     const x = scrollerRef.current.scrollLeft + event.clientX - rect.left;
-    setPlayhead(clamp(x / pxPerSec, 0, timelineDuration));
+    setPlayhead(clamp(segmentStart + x / pxPerSec, segmentStart, segmentEnd));
   };
 
   const addEffectAtPlayhead = (asset) => {
-    const clip = createEffectClip(asset, playhead, Math.min(8, Math.max(2, asset.duration || 4)));
+    const start = clamp(playhead, segmentStart, segmentEnd - MIN_CLIP_DURATION);
+    const maxDur = Math.max(MIN_CLIP_DURATION, segmentEnd - start);
+    const clip = createEffectClip(asset, start, Math.min(Math.min(8, Math.max(2, asset.duration || 4)), maxDur));
     setEffectClips((prev) => [...prev, clip]);
     setSelectedClip({ type: 'effect', id: clip.id });
   };
@@ -731,15 +861,34 @@ export default function TimelineBoard() {
     if (!asset || !effectTrackRef.current || !scrollerRef.current) return;
     const rect = effectTrackRef.current.getBoundingClientRect();
     const x = scrollerRef.current.scrollLeft + event.clientX - rect.left;
-    const clip = createEffectClip(asset, Math.max(0, x / pxPerSec), Math.min(8, Math.max(2, asset.duration || 4)));
+    const start = clamp(segmentStart + Math.max(0, x / pxPerSec), segmentStart, segmentEnd - MIN_CLIP_DURATION);
+    const maxDur = Math.max(MIN_CLIP_DURATION, segmentEnd - start);
+    const clip = createEffectClip(asset, start, Math.min(Math.min(8, Math.max(2, asset.duration || 4)), maxDur));
     setEffectClips((prev) => [...prev, clip]);
     setSelectedClip({ type: 'effect', id: clip.id });
   };
 
   const updateSelectedEffect = (patch) => {
     if (!selectedEffectClip) return;
+    const nextStart =
+      patch.start == null
+        ? selectedEffectClip.start
+        : clamp(Number(patch.start), segmentStart, segmentEnd - MIN_CLIP_DURATION);
+    const requestedDuration =
+      patch.duration == null ? selectedEffectClip.duration : Math.max(MIN_CLIP_DURATION, Number(patch.duration));
+    const maxDur = Math.max(MIN_CLIP_DURATION, segmentEnd - nextStart);
+    const nextDuration = Math.min(requestedDuration, maxDur);
     setEffectClips((prev) =>
-      prev.map((clip) => (clip.id === selectedEffectClip.id ? normalizeClip({ ...clip, ...patch }) : clip))
+      prev.map((clip) =>
+        clip.id === selectedEffectClip.id
+          ? normalizeClip({
+              ...clip,
+              ...patch,
+              start: nextStart,
+              duration: nextDuration,
+            })
+          : clip
+      )
     );
   };
 
@@ -988,8 +1137,10 @@ export default function TimelineBoard() {
 
   const renderDialogueClips = () =>
     visibleDialogueClips.map((clip) => {
-      const left = clip.start * pxPerSec;
-      const width = Math.max(58, clip.duration * pxPerSec);
+      const visibleStart = Math.max(segmentStart, clip.start);
+      const visibleEnd = Math.min(segmentEnd, clip.start + clip.duration);
+      const left = (visibleStart - segmentStart) * pxPerSec;
+      const width = Math.max(58, (visibleEnd - visibleStart) * pxPerSec);
       const selected = selectedClip?.type === 'dialogue' && selectedClip.id === clip.id;
       const tone =
         clip.status === 'synthesized'
@@ -1014,8 +1165,10 @@ export default function TimelineBoard() {
   const renderEffectClips = () =>
     visibleEffectClips.map((rawClip) => {
       const clip = normalizeClip(rawClip);
-      const left = clip.start * pxPerSec;
-      const width = Math.max(62, clip.duration * pxPerSec);
+      const visibleStart = Math.max(segmentStart, clip.start);
+      const visibleEnd = Math.min(segmentEnd, clip.start + clip.duration);
+      const left = (visibleStart - segmentStart) * pxPerSec;
+      const width = Math.max(62, (visibleEnd - visibleStart) * pxPerSec);
       const selected = selectedClip?.type === 'effect' && selectedClip.id === clip.id;
       const fadeInPct = clip.duration > 0 ? (clip.fadeIn / clip.duration) * 100 : 0;
       const fadeOutPct = clip.duration > 0 ? (clip.fadeOut / clip.duration) * 100 : 0;
@@ -1100,6 +1253,8 @@ export default function TimelineBoard() {
       );
     });
 
+  const localPlayhead = clamp(playhead - segmentStart, 0, timelineDuration);
+
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center bg-[#eef2f7] text-slate-700 dark:bg-[#050505] dark:text-[#d8d8d8]">
@@ -1161,7 +1316,7 @@ export default function TimelineBoard() {
 
       <div className="shrink-0 border-b border-slate-200 bg-white px-6 py-2 dark:border-[#202020] dark:bg-[#090909]">
         <div className="flex items-center gap-7 text-xs font-semibold text-slate-500 dark:text-[#a2a2a2]">
-          <span>{isZh ? `总时长 ${formatSeconds(timelineDuration)}` : `Duration ${formatSeconds(timelineDuration)}`}</span>
+          <span>{isZh ? `当前段总时长 ${formatSeconds(timelineDuration)}` : `Segment ${formatSeconds(timelineDuration)}`}</span>
           <div className="flex min-w-[210px] items-center gap-2">
             <span>{isZh ? '缩放' : 'Zoom'}</span>
             <input
@@ -1175,17 +1330,35 @@ export default function TimelineBoard() {
             />
           </div>
           <div className="flex min-w-[300px] items-center gap-2">
-            <span>{isZh ? '游标' : 'Playhead'} {formatSeconds(playhead)}</span>
+            <span>{isZh ? '游标' : 'Playhead'} {formatSeconds(localPlayhead)}</span>
             <input
               type="range"
               min={0}
               max={timelineDuration}
               step={0.1}
-              value={playhead}
-              onChange={(event) => setPlayhead(Number(event.target.value))}
+              value={localPlayhead}
+              onChange={(event) => setPlayhead(clamp(segmentStart + Number(event.target.value), segmentStart, segmentEnd))}
               className="w-full accent-slate-700"
             />
           </div>
+          {timelineSegments.length > 1 && (
+            <div className="flex min-w-[300px] items-center gap-2">
+              <span>{isZh ? '分段' : 'Segment'}</span>
+              <select
+                value={activeSegmentIndex}
+                onChange={(event) => setActiveSegmentIndex(Number(event.target.value))}
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700 outline-none focus:border-slate-400 dark:border-[#343434] dark:bg-[#121212] dark:text-[#e7e7e7]"
+              >
+                {timelineSegments.map((seg) => (
+                  <option key={seg.index} value={seg.index}>
+                    {isZh
+                      ? `第 ${seg.index + 1} 段 · 行 ${seg.lineStart}-${seg.lineEnd}`
+                      : `Part ${seg.index + 1} · Lines ${seg.lineStart}-${seg.lineEnd}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1248,7 +1421,7 @@ export default function TimelineBoard() {
                         <span className="ml-1 text-[10px] font-semibold text-slate-500 dark:text-[#9f9f9f]">{sec}s</span>
                       </div>
                     ))}
-                    <div className="pointer-events-none absolute top-0 h-full w-[2px] bg-rose-500/85" style={{ left: playhead * pxPerSec }} />
+                    <div className="pointer-events-none absolute top-0 h-full w-[2px] bg-rose-500/85" style={{ left: localPlayhead * pxPerSec }} />
                   </div>
                 </div>
               </div>
@@ -1259,7 +1432,11 @@ export default function TimelineBoard() {
                   style={{ width: TRACK_HEADER_WIDTH, height: DIALOGUE_TRACK_HEIGHT }}
                 >
                   <div className="text-sm font-semibold text-slate-800 dark:text-[#f0f0f0]">{isZh ? '对白轨' : 'Dialogue'}</div>
-                  <div className="mt-0.5 text-[11px] text-slate-500 dark:text-[#a0a0a0]">{dialogueClips.length} clips</div>
+                  <div className="mt-0.5 text-[11px] text-slate-500 dark:text-[#a0a0a0]">
+                    {isZh
+                      ? `${activeSegment.lineCount || 0} clips · 行 ${activeSegment.lineStart}-${activeSegment.lineEnd}`
+                      : `${activeSegment.lineCount || 0} clips · lines ${activeSegment.lineStart}-${activeSegment.lineEnd}`}
+                  </div>
                 </div>
                 <div
                   ref={dialogueTrackRef}
@@ -1268,7 +1445,7 @@ export default function TimelineBoard() {
                   style={{ width: timelineWidth, height: DIALOGUE_TRACK_HEIGHT }}
                 >
                   {renderDialogueClips()}
-                  <div className="pointer-events-none absolute top-0 h-full w-[2px] bg-rose-500/85" style={{ left: playhead * pxPerSec }} />
+                  <div className="pointer-events-none absolute top-0 h-full w-[2px] bg-rose-500/85" style={{ left: localPlayhead * pxPerSec }} />
                 </div>
               </div>
 
@@ -1278,7 +1455,9 @@ export default function TimelineBoard() {
                   style={{ width: TRACK_HEADER_WIDTH, height: EFFECT_TRACK_HEIGHT }}
                 >
                   <div className="text-sm font-semibold text-slate-800 dark:text-[#f0f0f0]">{isZh ? '环境音轨' : 'Effects'}</div>
-                  <div className="mt-0.5 text-[11px] text-slate-500 dark:text-[#a0a0a0]">{effectClips.length} clips</div>
+                  <div className="mt-0.5 text-[11px] text-slate-500 dark:text-[#a0a0a0]">
+                    {isZh ? `当前段 ${segmentEffectCount} 条` : `${segmentEffectCount} clips`}
+                  </div>
                   <button
                     onClick={clearEffectTrack}
                     className="mt-2 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 dark:border-[#3a3a3a] dark:bg-[#1a1a1a] dark:text-[#dddddd]"
@@ -1296,7 +1475,7 @@ export default function TimelineBoard() {
                   style={{ width: timelineWidth, height: EFFECT_TRACK_HEIGHT }}
                 >
                   {renderEffectClips()}
-                  <div className="pointer-events-none absolute top-0 h-full w-[2px] bg-rose-500/85" style={{ left: playhead * pxPerSec }} />
+                  <div className="pointer-events-none absolute top-0 h-full w-[2px] bg-rose-500/85" style={{ left: localPlayhead * pxPerSec }} />
                 </div>
               </div>
             </div>
